@@ -4,19 +4,19 @@
   "description": "Una aplicación que convierte texto desordenado en una lista de verificación ordenada y funcional utilizando la API de Gemini.",
   "icons": [
     {
-      "src": "public/icon-192x192.png",
+      "src": "/icon-192x192.png",
       "type": "image/png",
       "sizes": "192x192",
       "purpose": "any"
     },
     {
-      "src": "public/icon-512x512.png",
+      "src": "/icon-512x512.png",
       "type": "image/png",
       "sizes": "512x512",
       "purpose": "any"
     },
     {
-      "src": "public/icon-maskable-512x512.png",
+      "src": "/icon-maskable-512x512.png",
       "type": "image/png",
       "sizes": "512x512",
       "purpose": "maskable"
