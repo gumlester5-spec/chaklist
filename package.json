@@ -1,9 +1,24 @@
 {
-  "name": "checklister-ia-functions",
+  "name": "checklister-ia-app",
   "version": "1.0.0",
-  "description": "Netlify functions for Checklister IA",
+  "description": "Una aplicación que convierte texto desordenado en una lista de verificación ordenada y funcional utilizando la API de Gemini.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build"
+  },
   "dependencies": {
     "@google/genai": "^1.28.0",
-    "@netlify/functions": "^2.0.0"
+    "@netlify/functions": "^2.0.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/react": "^18.0.0",
+    "@types/react-dom": "^18.0.0",
+    "@vitejs/plugin-react": "^4.0.0",
+    "typescript": "^5.0.0",
+    "vite": "^5.0.0"
   }
 }
