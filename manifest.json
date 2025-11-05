@@ -1,0 +1,21 @@
+{
+  "short_name": "Checklister IA",
+  "name": "Generador de Listas de Verificación con IA",
+  "description": "Una aplicación que convierte texto desordenado en una lista de verificación ordenada y funcional utilizando la API de Gemini.",
+  "icons": [
+    {
+      "src": "/icon-192x192.svg",
+      "type": "image/svg+xml",
+      "sizes": "192x192"
+    },
+    {
+      "src": "/icon-512x512.svg",
+      "type": "image/svg+xml",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#0f172a",
+  "background_color": "#0f172a"
+}
