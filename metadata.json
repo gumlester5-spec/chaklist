@@ -1,0 +1,5 @@
+{
+  "name": "Generador de Listas de Verificación",
+  "description": "Una aplicación que convierte texto desordenado en una lista de verificación ordenada y funcional utilizando la API de Gemini.",
+  "requestFramePermissions": []
+}
