@@ -2,7 +2,7 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { generateChecklistFromText } from './services/geminiService';
 import { ChecklistItem } from './components/ChecklistItem';
-import { CopyIcon, SparklesIcon, PlusIcon, TrashIcon, ClearIcon, MenuIcon, DownloadIcon, PencilIcon, TextIcon, LightbulbIcon } from './components/Icons';
+import { CopyIcon, SparklesIcon, PlusIcon, TrashIcon, ClearIcon, MenuIcon, DownloadIcon, PencilIcon, TextIcon, LightbulbIcon, DownloadCloudIcon, RefreshCwIcon } from './components/Icons';
 import { initDB, getAllLists, addList, updateList, deleteList, Checklist, ChecklistItemData, TextBlock, TextBlockType } from './services/dbService';
 
 type ModalState = {
@@ -223,6 +223,65 @@ const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+
+  // PWA Install and Update State
+  const [installPrompt, setInstallPrompt] = useState<any>(null);
+  const [isUpdateAvailable, setIsUpdateAvailable] = useState(false);
+  const waitingWorkerRef = useRef<ServiceWorker | null>(null);
+
+  useEffect(() => {
+    // PWA Install prompt logic
+    const handleBeforeInstallPrompt = (e: Event) => {
+      e.preventDefault();
+      if (!window.matchMedia('(display-mode: standalone)').matches) {
+        setInstallPrompt(e);
+      }
+    };
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
+    const handleAppInstalled = () => {
+      setInstallPrompt(null);
+    };
+    window.addEventListener('appinstalled', handleAppInstalled);
+
+    // Service Worker update logic
+    if ('serviceWorker' in navigator) {
+      const registerServiceWorker = () => {
+        const swUrl = `${window.location.origin}/sw.js`;
+        navigator.serviceWorker.register(swUrl).then(registration => {
+          registration.onupdatefound = () => {
+            const newWorker = registration.installing;
+            if (newWorker) {
+              newWorker.onstatechange = () => {
+                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                  waitingWorkerRef.current = newWorker;
+                  setIsUpdateAvailable(true);
+                }
+              };
+            }
+          };
+        }).catch(error => {
+          console.error('Service Worker registration failed:', error);
+        });
+      };
+      
+      // FIX: Defer registration until the page is fully loaded to prevent an "invalid state" error.
+      window.addEventListener('load', registerServiceWorker);
+
+      let refreshing = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (!refreshing) {
+          window.location.reload();
+          refreshing = true;
+        }
+      });
+    }
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      window.removeEventListener('appinstalled', handleAppInstalled);
+    };
+  }, []);
   
   useEffect(() => {
     const loadData = async () => {
@@ -243,6 +302,25 @@ const App: React.FC = () => {
     };
     loadData();
   }, []);
+
+  const handleInstallClick = async () => {
+    if (!installPrompt) return;
+    installPrompt.prompt();
+    const { outcome } = await installPrompt.userChoice;
+    if (outcome === 'accepted') {
+      console.log('User accepted the install prompt');
+    } else {
+      console.log('User dismissed the install prompt');
+    }
+    setInstallPrompt(null);
+  };
+  
+  const handleUpdateApp = () => {
+    if (waitingWorkerRef.current) {
+        waitingWorkerRef.current.postMessage({ type: 'SKIP_WAITING' });
+        setIsUpdateAvailable(false);
+    }
+  };
 
   const handleCreateNew = () => {
     setActiveListId(null);
@@ -339,6 +417,7 @@ const App: React.FC = () => {
 
   return (
     <div className="flex h-screen font-sans bg-slate-900 text-slate-100 overflow-hidden">
+      {isUpdateAvailable && <UpdateAvailableToast onUpdate={handleUpdateApp} />}
       {isReportModalOpen && activeList && (
         <ReportMetadataModal 
             listTitle={activeList.title}
@@ -356,6 +435,8 @@ const App: React.FC = () => {
         onUpdateList={handleUpdateList}
         isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)}
+        installPrompt={installPrompt}
+        onInstall={handleInstallClick}
       />
       <main className="flex-1 flex flex-col overflow-y-auto">
         <header className="flex lg:hidden items-center justify-between p-4 border-b border-slate-700/80 bg-slate-900/50 backdrop-blur-sm sticky top-0 z-10">
@@ -392,9 +473,11 @@ interface SidebarProps {
   onUpdateList: (list: Checklist) => void;
   isOpen: boolean;
   onClose: () => void;
+  installPrompt: any;
+  onInstall: () => void;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ lists, activeListId, onCreateNew, onSelectList, onDeleteList, onUpdateList, isOpen, onClose }) => {
+const Sidebar: React.FC<SidebarProps> = ({ lists, activeListId, onCreateNew, onSelectList, onDeleteList, onUpdateList, isOpen, onClose, installPrompt, onInstall }) => {
     const [editingListId, setEditingListId] = useState<number | null>(null);
     const [editingTitle, setEditingTitle] = useState('');
 
@@ -486,6 +569,17 @@ const Sidebar: React.FC<SidebarProps> = ({ lists, activeListId, onCreateNew, onS
             ))}
           </ul>
         </nav>
+        <footer className="mt-auto pt-4 border-t border-slate-700/80">
+            {installPrompt && (
+                <button
+                    onClick={onInstall}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-slate-700 text-slate-300 font-semibold rounded-lg hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-800 focus:ring-slate-500 transition-all duration-200"
+                >
+                    <DownloadCloudIcon className="w-5 h-5" />
+                    Instalar App
+                </button>
+            )}
+        </footer>
       </aside>
     </>
     );
@@ -870,5 +964,19 @@ const ReportMetadataModal: React.FC<ReportMetadataModalProps> = ({ listTitle, on
         </div>
     );
 };
+
+const UpdateAvailableToast: React.FC<{ onUpdate: () => void }> = ({ onUpdate }) => (
+    <div className="fixed bottom-4 right-4 z-50 bg-slate-700 text-white py-3 px-5 rounded-lg shadow-lg flex items-center gap-4 animate-in fade-in-0 slide-in-from-bottom-5 duration-300">
+        <p className="text-sm font-medium">¡Nueva versión disponible!</p>
+        <button 
+            onClick={onUpdate}
+            className="flex items-center gap-2 px-3 py-1.5 bg-sky-600 text-white text-sm font-semibold rounded-md hover:bg-sky-500 transition-colors"
+        >
+            <RefreshCwIcon className="w-4 h-4" />
+            Actualizar
+        </button>
+    </div>
+);
+
 
 export default App;
