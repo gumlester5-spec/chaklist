@@ -3,6 +3,7 @@ const URLS_TO_CACHE = [
   '/',
   '/index.html',
   '/manifest.json',
+  '/icon.svg',
   '/icon-192x192.png',
   '/icon-512x512.png',
   '/icon-maskable-512x512.png',
