@@ -1,16 +1,16 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
 
-const API_KEY = process.env.API_KEY;
-
-if (!API_KEY) {
-  throw new Error("API_KEY environment variable not set");
-}
-
-const ai = new GoogleGenAI({ apiKey: API_KEY });
-
 export async function generateChecklistFromText(text: string): Promise<string[]> {
   try {
+    const API_KEY = process.env.API_KEY;
+
+    if (!API_KEY) {
+      throw new Error("La variable de entorno API_KEY no está configurada. Por favor, configúrala en los ajustes de tu sitio en Netlify.");
+    }
+    
+    const ai = new GoogleGenAI({ apiKey: API_KEY });
+
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
       contents: `Analiza el siguiente texto y extráelo en una lista de tareas o elementos distintos. Devuelve el resultado como un array JSON de strings. No incluyas nada más que el array JSON en tu respuesta. El texto es: "${text}"`,
@@ -36,6 +36,7 @@ export async function generateChecklistFromText(text: string): Promise<string[]>
     }
   } catch (error) {
     console.error("Error al llamar a la API de Gemini:", error);
-    throw new Error("No se pudo generar la lista desde la API.");
+    // Propaga el error para que se muestre en la interfaz de usuario
+    throw error;
   }
 }

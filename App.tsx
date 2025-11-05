@@ -278,7 +278,8 @@ const App: React.FC = () => {
       setActiveListId(newList.id);
       setView('detail');
     } catch (err) {
-      setError('No se pudo generar la lista. Por favor, inténtalo de nuevo.');
+      const message = err instanceof Error ? err.message : 'No se pudo generar la lista. Por favor, inténtalo de nuevo.';
+      setError(message);
       console.error(err);
     } finally {
       setIsGenerating(false);
