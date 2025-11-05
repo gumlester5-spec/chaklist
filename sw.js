@@ -2,12 +2,7 @@ const CACHE_NAME = 'checklister-ia-cache-v1';
 const URLS_TO_CACHE = [
   '/',
   '/index.html',
-  '/index.tsx',
-  '/App.tsx',
-  '/components/ChecklistItem.tsx',
-  '/components/Icons.tsx',
-  '/services/dbService.ts',
-  '/services/geminiService.ts',
+  '/manifest.json',
   '/icon-192x192.png',
   '/icon-512x512.png',
   '/icon-maskable-512x512.png',
