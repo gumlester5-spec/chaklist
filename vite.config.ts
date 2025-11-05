@@ -26,6 +26,21 @@ export default defineConfig({
                 statuses: [0, 200]
               }
             }
+          },
+          {
+            // Añadimos una regla para el CDN de Tailwind que estaba en index.html
+            urlPattern: /^https:\/\/cdn\.tailwindcss\.com\/.*/i,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'jspdf-cache',
+              expiration: {
+                maxEntries: 10,
+                maxAgeSeconds: 60 * 60 * 24 * 365 // 365 days
+              },
+              cacheableResponse: {
+                statuses: [0, 200]
+              }
+            }
           }
         ]
       },
