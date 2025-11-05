@@ -1,15 +1,11 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 
 export async function generateChecklistFromText(text: string): Promise<string[]> {
   try {
-    const API_KEY = process.env.API_KEY;
-
-    if (!API_KEY) {
-      throw new Error("La variable de entorno API_KEY no está configurada. Por favor, configúrala en los ajustes de tu sitio en Netlify.");
-    }
-    
-    const ai = new GoogleGenAI({ apiKey: API_KEY });
+    // Initialize the Gemini client directly with the environment variable.
+    // The build process (e.g., on Netlify) must replace `process.env.API_KEY`
+    // with the actual key.
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
@@ -36,7 +32,13 @@ export async function generateChecklistFromText(text: string): Promise<string[]>
     }
   } catch (error) {
     console.error("Error al llamar a la API de Gemini:", error);
-    // Propaga el error para que se muestre en la interfaz de usuario
+    
+    // Provide a more specific error message if the API key is missing or invalid.
+    if (error instanceof Error && /API key/i.test(error.message)) {
+         throw new Error("Error con la API Key. Asegúrate de que la variable de entorno API_KEY esté configurada correctamente en los ajustes de tu sitio en Netlify y que la clave sea válida.");
+    }
+    
+    // Propagate other errors to be displayed in the UI.
     throw error;
   }
 }

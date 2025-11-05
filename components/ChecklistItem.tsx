@@ -27,7 +27,8 @@ export const ChecklistItem: React.FC<ChecklistItemProps> = ({ item, onToggle, on
     const remainingSlots = MAX_IMAGES - images.length;
     const filesToProcess = Array.from(files).slice(0, remainingSlots);
     
-    const imagePromises = filesToProcess.map(file => {
+    // FIX: Explicitly type `file` as `File` to resolve TypeScript error where it was inferred as `unknown`.
+    const imagePromises = filesToProcess.map((file: File) => {
       return new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onloadend = () => resolve(reader.result as string);

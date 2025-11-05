@@ -250,6 +250,17 @@ const App: React.FC = () => {
     setIsSidebarOpen(false);
   };
 
+  const handleCancelNewList = () => {
+    if (lists.length > 0) {
+      // Revert to the detail view of the first list (which is the most recent)
+      setActiveListId(lists[0].id);
+      setView('detail');
+    } else {
+      // If there are no lists, go back to the welcome screen
+      setView('welcome');
+    }
+  };
+
   const handleSelectList = (id: number) => {
     setActiveListId(id);
     setView('detail');
@@ -362,7 +373,7 @@ const App: React.FC = () => {
         <div className="flex-1 p-4 sm:p-6 lg:p-8">
             {error && <p className="text-red-400 mb-4">{error}</p>}
             {view === 'welcome' && <WelcomeScreen onCreateNew={handleCreateNew} />}
-            {view === 'newList' && <NewChecklist onGenerate={handleGenerateAndSave} isGenerating={isGenerating} />}
+            {view === 'newList' && <NewChecklist onGenerate={handleGenerateAndSave} isGenerating={isGenerating} onCancel={handleCancelNewList} />}
             {view === 'detail' && activeList && <ChecklistDetail list={activeList} onUpdate={handleUpdateList} onOpenReportModal={() => setIsReportModalOpen(true)} />}
         </div>
       </main>
@@ -505,9 +516,10 @@ const WelcomeScreen: React.FC<{ onCreateNew: () => void }> = ({ onCreateNew }) =
 interface NewChecklistProps {
     onGenerate: (text: string) => void;
     isGenerating: boolean;
+    onCancel: () => void;
 }
 
-const NewChecklist: React.FC<NewChecklistProps> = ({ onGenerate, isGenerating }) => {
+const NewChecklist: React.FC<NewChecklistProps> = ({ onGenerate, isGenerating, onCancel }) => {
     const [inputText, setInputText] = useState('');
     
     return (
@@ -521,26 +533,35 @@ const NewChecklist: React.FC<NewChecklistProps> = ({ onGenerate, isGenerating })
               className="w-full flex-1 p-4 bg-slate-800 border-2 border-slate-700 rounded-lg focus:ring-2 focus:ring-sky-500 focus:border-sky-500 transition-colors duration-200 resize-none placeholder-slate-500"
               rows={10}
             />
-            <button
-                onClick={() => onGenerate(inputText)}
-                disabled={isGenerating || !inputText.trim()}
-                className="mt-4 flex items-center justify-center gap-2 px-6 py-3 bg-sky-600 text-white font-semibold rounded-lg hover:bg-sky-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-900 focus:ring-sky-500 transition-all duration-200 disabled:bg-slate-600 disabled:cursor-not-allowed"
-            >
-                 {isGenerating ? (
-                  <>
-                    <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    Generando...
-                  </>
-                ) : (
-                  <>
-                    <SparklesIcon className="w-5 h-5" />
-                    Generar y Guardar Lista
-                  </>
-                )}
-            </button>
+            <div className="mt-4 flex items-center justify-end gap-3">
+                <button
+                    onClick={onCancel}
+                    type="button"
+                    className="px-6 py-3 bg-slate-700 text-slate-300 font-medium rounded-lg hover:bg-slate-600 transition-colors"
+                >
+                    Cancelar
+                </button>
+                <button
+                    onClick={() => onGenerate(inputText)}
+                    disabled={isGenerating || !inputText.trim()}
+                    className="flex items-center justify-center gap-2 px-6 py-3 bg-sky-600 text-white font-semibold rounded-lg hover:bg-sky-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-900 focus:ring-sky-500 transition-all duration-200 disabled:bg-slate-600 disabled:cursor-not-allowed"
+                >
+                    {isGenerating ? (
+                    <>
+                        <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Generando...
+                    </>
+                    ) : (
+                    <>
+                        <SparklesIcon className="w-5 h-5" />
+                        Generar y Guardar Lista
+                    </>
+                    )}
+                </button>
+            </div>
         </div>
     );
 };
