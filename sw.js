@@ -8,8 +8,9 @@ const URLS_TO_CACHE = [
   '/components/Icons.tsx',
   '/services/dbService.ts',
   '/services/geminiService.ts',
-  '/icon-192x192.svg',
-  '/icon-512x512.svg',
+  '/icon-192x192.png',
+  '/icon-512x512.png',
+  '/icon-maskable-512x512.png',
   'https://cdn.tailwindcss.com',
   'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js'
 ];
@@ -25,6 +26,11 @@ self.addEventListener('install', event => {
 });
 
 self.addEventListener('fetch', event => {
+  // Ignorar peticiones que no sean GET (ej: POST a la API)
+  if (event.request.method !== 'GET') {
+    return;
+  }
+  
   event.respondWith(
     caches.match(event.request)
       .then(response => {
@@ -35,19 +41,20 @@ self.addEventListener('fetch', event => {
 
         return fetch(event.request).then(
           response => {
-            // Check if we received a valid response
-            if (!response || response.status !== 200 || response.type !== 'basic') {
-              if (response.type !== 'opaque') { // Opaque responses are for cross-origin requests like CDNs
-                 return response;
-              }
+            // Comprobar si recibimos una respuesta válida para cachear
+            if (!response || response.status !== 200) {
+              return response;
             }
 
-            const responseToCache = response.clone();
+            // Solo cachear recursos de tipo 'basic' (mismo origen) y 'opaque' (CDNs)
+            if (response.type === 'basic' || response.type === 'opaque') {
+                const responseToCache = response.clone();
 
-            caches.open(CACHE_NAME)
-              .then(cache => {
-                cache.put(event.request, responseToCache);
-              });
+                caches.open(CACHE_NAME)
+                  .then(cache => {
+                    cache.put(event.request, responseToCache);
+                  });
+            }
 
             return response;
           }
