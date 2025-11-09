@@ -286,12 +286,14 @@ const App: React.FC = () => {
   }, []);
   
   const loadDataFromDb = useCallback(async () => {
+    // This function is for explicit reloads, like after an import.
+    setIsLoading(true);
     try {
       await initDB();
       const storedLists = await getAllLists();
       setLists(storedLists);
       if (storedLists.length > 0) {
-        // If the active list was deleted, select the first one.
+        // If the active list was deleted or doesn't exist, select the first one.
         if (!activeListId || !storedLists.some(l => l.id === activeListId)) {
           setActiveListId(storedLists[0].id);
         }
@@ -308,9 +310,30 @@ const App: React.FC = () => {
     }
   }, [activeListId]);
 
+  // Effect for initial data load. Runs only once on mount.
   useEffect(() => {
-    loadDataFromDb();
-  }, [loadDataFromDb]);
+    const initialLoad = async () => {
+      try {
+        await initDB();
+        const storedLists = await getAllLists();
+        setLists(storedLists);
+        if (storedLists.length > 0) {
+          // On initial load, activeListId is null, so just pick the first.
+          setActiveListId(storedLists[0].id);
+          setView('detail');
+        } else {
+          setActiveListId(null);
+          setView('welcome');
+        }
+      } catch (e) {
+        console.error("Failed to load lists from DB", e);
+        setError("No se pudieron cargar las listas guardadas.");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    initialLoad();
+  }, []);
 
   const handleInstallClick = async () => {
     if (!installPrompt) return;
@@ -500,22 +523,20 @@ interface BottomNavBarProps {
 const BottomNavBar: React.FC<BottomNavBarProps> = ({ onOpenSidebar, onCreateNew, onOpenSettings }) => {
     return (
         <div className="fixed bottom-0 left-0 right-0 h-16 lg:hidden z-20">
-            <div className="absolute inset-x-0 bottom-6 flex justify-center">
-                <button 
-                    onClick={onCreateNew} 
-                    className="bg-gradient-to-r from-sky-500 to-indigo-600 text-white rounded-full p-4 shadow-lg hover:scale-105 transition-transform duration-200 ease-in-out"
-                    aria-label="Crear nueva lista"
-                >
-                    <PlusIcon className="w-7 h-7" />
-                </button>
-            </div>
-            <footer className="absolute inset-0 bg-slate-800/80 backdrop-blur-sm border-t border-slate-700 flex justify-between items-center px-4">
-                <button onClick={onOpenSidebar} className="flex-1 flex flex-col items-center justify-center text-slate-400 hover:text-sky-400 transition-colors h-full">
+            <footer className="absolute inset-0 bg-slate-800/80 backdrop-blur-sm border-t border-slate-700 flex justify-around items-center px-2">
+                <button onClick={onOpenSidebar} className="flex-1 flex flex-col items-center justify-center text-slate-400 hover:text-sky-400 transition-colors h-full rounded-md hover:bg-slate-700/50">
                     <ListIcon className="w-6 h-6 mb-1" />
                     <span className="text-xs tracking-wide">Listas</span>
                 </button>
-                <div className="w-20"></div> 
-                <button onClick={onOpenSettings} className="flex-1 flex flex-col items-center justify-center text-slate-400 hover:text-sky-400 transition-colors h-full">
+                <button 
+                    onClick={onCreateNew} 
+                    className="flex-1 flex flex-col items-center justify-center text-sky-400 hover:text-sky-300 transition-colors h-full rounded-md hover:bg-slate-700/50"
+                    aria-label="Crear nueva lista"
+                >
+                    <PlusIcon className="w-6 h-6 mb-1" />
+                    <span className="text-xs tracking-wide">Nueva</span>
+                </button>
+                <button onClick={onOpenSettings} className="flex-1 flex flex-col items-center justify-center text-slate-400 hover:text-sky-400 transition-colors h-full rounded-md hover:bg-slate-700/50">
                     <SettingsIcon className="w-6 h-6 mb-1" />
                     <span className="text-xs tracking-wide">Ajustes</span>
                 </button>
