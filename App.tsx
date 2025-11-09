@@ -1,5 +1,6 @@
 
 
+
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { generateChecklistFromText } from './services/geminiService';
 import { ChecklistItem } from './components/ChecklistItem';
@@ -371,11 +372,11 @@ const App: React.FC = () => {
     }
   };
 
-  const handleSelectList = (id: number) => {
+  const handleSelectList = useCallback((id: number) => {
     setActiveListId(id);
     setView('detail');
     setIsSidebarOpen(false);
-  };
+  }, []);
   
   const handleGenerateAndSave = async (inputText: string) => {
     if (!inputText.trim()) {
@@ -427,15 +428,15 @@ const App: React.FC = () => {
     }
   };
   
-  const handleUpdateList = async (updatedList: Checklist) => {
+  const handleUpdateList = useCallback(async (updatedList: Checklist) => {
     try {
         await updateList(updatedList);
-        setLists(lists.map(l => l.id === updatedList.id ? updatedList : l));
+        setLists(currentLists => currentLists.map(l => l.id === updatedList.id ? updatedList : l));
     } catch(e) {
         console.error("Failed to update list", e);
         setError("No se pudo actualizar la lista.");
     }
-  };
+  }, []);
   
   const handleDeleteAllData = async () => {
       try {
@@ -483,7 +484,6 @@ const App: React.FC = () => {
         onCreateNew={handleCreateNew}
         onSelectList={handleSelectList}
         onDeleteList={handleDeleteList}
-        onUpdateList={handleUpdateList}
         isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)}
         installPrompt={installPrompt}
@@ -551,7 +551,6 @@ interface SidebarProps {
   onCreateNew: () => void;
   onSelectList: (id: number) => void;
   onDeleteList: (id: number) => void;
-  onUpdateList: (list: Checklist) => void;
   isOpen: boolean;
   onClose: () => void;
   installPrompt: any;
@@ -559,37 +558,7 @@ interface SidebarProps {
   onOpenSettings: () => void;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ lists, activeListId, onCreateNew, onSelectList, onDeleteList, onUpdateList, isOpen, onClose, installPrompt, onInstall, onOpenSettings }) => {
-    const [editingListId, setEditingListId] = useState<number | null>(null);
-    const [editingTitle, setEditingTitle] = useState('');
-
-    const handleEditClick = (e: React.MouseEvent, list: Checklist) => {
-        e.stopPropagation();
-        e.preventDefault();
-        setEditingListId(list.id);
-        setEditingTitle(list.title);
-    };
-    
-    const handleSaveTitle = () => {
-        if (editingListId === null) return;
-        
-        const listToUpdate = lists.find(l => l.id === editingListId);
-        const trimmedTitle = editingTitle.trim();
-
-        if (listToUpdate && listToUpdate.title !== trimmedTitle && trimmedTitle) {
-            onUpdateList({ ...listToUpdate, title: trimmedTitle });
-        }
-        setEditingListId(null);
-    };
-
-    const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-        if (e.key === 'Enter') {
-            handleSaveTitle();
-        } else if (e.key === 'Escape') {
-            setEditingListId(null);
-        }
-    };
-
+const Sidebar: React.FC<SidebarProps> = ({ lists, activeListId, onCreateNew, onSelectList, onDeleteList, isOpen, onClose, installPrompt, onInstall, onOpenSettings }) => {
     return (
     <>
       <div 
@@ -619,33 +588,15 @@ const Sidebar: React.FC<SidebarProps> = ({ lists, activeListId, onCreateNew, onS
               <li key={list.id}>
                 <a
                   href="#"
-                  onClick={(e) => { e.preventDefault(); if (editingListId !== list.id) onSelectList(list.id); }}
+                  onClick={(e) => { e.preventDefault(); onSelectList(list.id); }}
                   className={`group flex justify-between items-center p-2 rounded-md text-sm truncate ${activeListId === list.id ? 'bg-sky-500/20 text-sky-300' : 'text-slate-400 hover:bg-slate-700 hover:text-slate-200'}`}
                 >
-                  {editingListId === list.id ? (
-                      <input
-                        type="text"
-                        value={editingTitle}
-                        onChange={(e) => setEditingTitle(e.target.value)}
-                        onBlur={handleSaveTitle}
-                        onKeyDown={handleKeyDown}
-                        className="w-full bg-slate-600 text-slate-100 rounded-sm px-1 py-0 border-none outline-none ring-1 ring-sky-500"
-                        autoFocus
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                  ) : (
-                    <>
-                      <span 
-                        className="flex-1 truncate cursor-pointer"
-                        onClick={(e) => handleEditClick(e, list)}
-                      >
+                    <span className="flex-1 truncate">
                         {list.title}
-                      </span>
-                      <button onClick={(e) => { e.stopPropagation(); onDeleteList(list.id); }} className="ml-2 p-1 text-slate-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity">
+                    </span>
+                    <button onClick={(e) => { e.stopPropagation(); onDeleteList(list.id); }} className="ml-2 p-1 text-slate-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity">
                         <TrashIcon className="w-4 h-4" />
-                      </button>
-                    </>
-                  )}
+                    </button>
                 </a>
               </li>
             ))}
@@ -760,56 +711,77 @@ const ChecklistDetail: React.FC<ChecklistDetailProps> = ({ list, onUpdate, onOpe
     const [copySuccess, setCopySuccess] = useState('');
     const [isExporting, setIsExporting] = useState(false);
     const [modalState, setModalState] = useState<ModalState>({ isOpen: false, itemIndex: null, textBlock: null, isNew: false });
+    const [isEditingTitle, setIsEditingTitle] = useState(false);
+    const titleInputRef = useRef<HTMLInputElement>(null);
     
-    const handleToggleItem = (itemIndex: number) => {
-        const newItems = [...list.items];
+    // PERF: Use a ref to hold the latest list data. This prevents callbacks from being
+    // recreated on every render, which in turn allows React.memo in ChecklistItem to work correctly.
+    const listRef = useRef(list);
+    useEffect(() => {
+        listRef.current = list;
+    }, [list]);
+
+    useEffect(() => {
+        if (isEditingTitle) {
+            titleInputRef.current?.focus();
+            titleInputRef.current?.select();
+        }
+    }, [isEditingTitle]);
+
+    const handleToggleItem = useCallback((itemIndex: number) => {
+        const currentList = listRef.current;
+        const newItems = [...currentList.items];
         newItems[itemIndex].isChecked = !newItems[itemIndex].isChecked;
-        onUpdate({ ...list, items: newItems });
-    };
+        onUpdate({ ...currentList, items: newItems });
+    }, [onUpdate]);
 
-    const handleTitleChange = (newTitle: string) => {
-        onUpdate({ ...list, title: newTitle });
-    };
+    const handleTitleChange = useCallback((newTitle: string) => {
+        const currentList = listRef.current;
+        onUpdate({ ...currentList, title: newTitle });
+    }, [onUpdate]);
 
-    const handleAddImages = (itemIndex: number, newImages: string[]) => {
-        const newItems = [...list.items];
+    const handleAddImages = useCallback((itemIndex: number, newImages: string[]) => {
+        const currentList = listRef.current;
+        const newItems = [...currentList.items];
         const currentImages = newItems[itemIndex].images || [];
         newItems[itemIndex].images = [...currentImages, ...newImages];
-        onUpdate({ ...list, items: newItems });
-    };
+        onUpdate({ ...currentList, items: newItems });
+    }, [onUpdate]);
 
-    const handleDeleteImage = (itemIndex: number, imageIndex: number) => {
-        const newItems = [...list.items];
+    const handleDeleteImage = useCallback((itemIndex: number, imageIndex: number) => {
+        const currentList = listRef.current;
+        const newItems = [...currentList.items];
         const currentImages = newItems[itemIndex].images || [];
         newItems[itemIndex].images = currentImages.filter((_, idx) => idx !== imageIndex);
-        onUpdate({ ...list, items: newItems });
-    };
+        onUpdate({ ...currentList, items: newItems });
+    }, [onUpdate]);
 
-    const handleOpenAddTextModal = (itemIndex: number, type: TextBlockType) => {
+    const handleOpenAddTextModal = useCallback((itemIndex: number, type: TextBlockType) => {
         setModalState({ 
             isOpen: true, 
             itemIndex,
             textBlock: { id: Date.now().toString(), type, content: '' },
             isNew: true
         });
-    };
+    }, []);
 
-    const handleOpenEditTextModal = (itemIndex: number, textBlock: TextBlock) => {
+    const handleOpenEditTextModal = useCallback((itemIndex: number, textBlock: TextBlock) => {
         setModalState({ 
             isOpen: true, 
             itemIndex,
             textBlock: { ...textBlock },
             isNew: false
         });
-    };
+    }, []);
 
-    const handleCloseModal = () => {
+    const handleCloseModal = useCallback(() => {
         setModalState({ isOpen: false, itemIndex: null, textBlock: null, isNew: false });
-    };
+    }, []);
 
-    const handleSaveText = (textBlock: TextBlock) => {
+    const handleSaveText = useCallback((textBlock: TextBlock) => {
         if (modalState.itemIndex === null) return;
-        const newItems = [...list.items];
+        const currentList = listRef.current;
+        const newItems = [...currentList.items];
         const item = newItems[modalState.itemIndex];
         const currentTexts = item.texts || [];
         
@@ -819,20 +791,22 @@ const ChecklistDetail: React.FC<ChecklistDetailProps> = ({ list, onUpdate, onOpe
             item.texts = currentTexts.map(t => t.id === textBlock.id ? textBlock : t);
         }
         
-        onUpdate({ ...list, items: newItems });
+        onUpdate({ ...currentList, items: newItems });
         handleCloseModal();
-    };
+    }, [onUpdate, handleCloseModal, modalState.itemIndex, modalState.isNew]);
     
-    const handleDeleteText = (itemIndex: number, textBlockId: string) => {
-        const newItems = [...list.items];
+    const handleDeleteText = useCallback((itemIndex: number, textBlockId: string) => {
+        const currentList = listRef.current;
+        const newItems = [...currentList.items];
         const item = newItems[itemIndex];
         item.texts = (item.texts || []).filter(t => t.id !== textBlockId);
-        onUpdate({ ...list, items: newItems });
-    };
+        onUpdate({ ...currentList, items: newItems });
+    }, [onUpdate]);
 
     const handleCopyToClipboard = useCallback(() => {
-        if (list.items.length === 0) return;
-        const textToCopy = list.items.map(item => `- [${item.isChecked ? 'x' : ' '}] ${item.text}`).join('\n');
+        const currentList = listRef.current;
+        if (currentList.items.length === 0) return;
+        const textToCopy = currentList.items.map(item => `- [${item.isChecked ? 'x' : ' '}] ${item.text}`).join('\n');
         navigator.clipboard.writeText(textToCopy).then(() => {
           setCopySuccess('¡Copiado!');
           setTimeout(() => setCopySuccess(''), 2000);
@@ -840,7 +814,7 @@ const ChecklistDetail: React.FC<ChecklistDetailProps> = ({ list, onUpdate, onOpe
           setCopySuccess('Error al copiar');
           setTimeout(() => setCopySuccess(''), 2000);
         });
-    }, [list.items]);
+    }, []);
     
     return (
         <div className="h-full flex flex-col">
@@ -852,12 +826,35 @@ const ChecklistDetail: React.FC<ChecklistDetailProps> = ({ list, onUpdate, onOpe
                 />
             )}
             <div className="flex flex-col sm:flex-row justify-between items-start gap-3 sm:gap-4 mb-4">
-                <input
-                    type="text"
-                    value={list.title}
-                    onChange={(e) => handleTitleChange(e.target.value)}
-                    className="text-xl sm:text-2xl font-bold text-slate-100 bg-transparent border-none focus:ring-0 focus:outline-none p-0 w-full order-2 sm:order-1"
-                />
+                <div className="flex items-center gap-2 min-w-0 order-2 sm:order-1 flex-1">
+                    {isEditingTitle ? (
+                        <input
+                            ref={titleInputRef}
+                            type="text"
+                            value={list.title}
+                            onChange={(e) => handleTitleChange(e.target.value)}
+                            onBlur={() => setIsEditingTitle(false)}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === 'Escape') {
+                                    (e.target as HTMLInputElement).blur();
+                                }
+                            }}
+                            className="text-xl sm:text-2xl font-bold text-slate-100 bg-slate-700/50 border-2 border-slate-600 rounded-md focus:ring-2 focus:ring-sky-500 focus:border-sky-500 p-1 w-full"
+                        />
+                    ) : (
+                        <div className="flex items-center gap-2 group min-w-0 flex-1" onClick={() => setIsEditingTitle(true)}>
+                            <h2 className="text-xl sm:text-2xl font-bold text-slate-100 truncate cursor-pointer p-1">
+                                {list.title}
+                            </h2>
+                            <button 
+                                className="p-1.5 text-slate-400 hover:text-white rounded-md hover:bg-slate-700 transition-colors opacity-0 group-hover:opacity-100 focus-within:opacity-100"
+                                aria-label="Editar título"
+                            >
+                                <PencilIcon className="w-5 h-5" />
+                            </button>
+                        </div>
+                    )}
+                </div>
                 <div className="flex items-center gap-2 order-1 sm:order-2 self-end sm:self-auto">
                     <button
                         onClick={handleCopyToClipboard}
@@ -882,13 +879,14 @@ const ChecklistDetail: React.FC<ChecklistDetailProps> = ({ list, onUpdate, onOpe
                   {list.items.map((item, index) => (
                     <ChecklistItem 
                       key={index} 
-                      item={item} 
-                      onToggle={() => handleToggleItem(index)}
-                      onAddImages={(images) => handleAddImages(index, images)}
-                      onDeleteImage={(imageIndex) => handleDeleteImage(index, imageIndex)}
-                      onOpenAddTextModal={(type) => handleOpenAddTextModal(index, type)}
-                      onOpenEditTextModal={(textBlock) => handleOpenEditTextModal(index, textBlock)}
-                      onDeleteText={(textBlockId) => handleDeleteText(index, textBlockId)}
+                      item={item}
+                      index={index}
+                      onToggle={handleToggleItem}
+                      onAddImages={handleAddImages}
+                      onDeleteImage={handleDeleteImage}
+                      onOpenAddTextModal={handleOpenAddTextModal}
+                      onOpenEditTextModal={handleOpenEditTextModal}
+                      onDeleteText={handleDeleteText}
                     />
                   ))}
                 </ul>

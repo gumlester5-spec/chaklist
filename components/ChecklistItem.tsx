@@ -4,25 +4,29 @@ import { ImageIcon, ClearIcon, TextIcon, PencilIcon, TrashIcon, EyeIcon, EyeOffI
 
 interface ChecklistItemProps {
   item: ChecklistItemData;
-  onToggle: () => void;
-  onAddImages: (images: string[]) => void;
-  onDeleteImage: (imageIndex: number) => void;
-  onOpenAddTextModal: (type: TextBlockType) => void;
-  onOpenEditTextModal: (textBlock: TextBlock) => void;
-  onDeleteText: (textBlockId: string) => void;
+  index: number;
+  onToggle: (index: number) => void;
+  onAddImages: (index: number, images: string[]) => void;
+  onDeleteImage: (index: number, imageIndex: number) => void;
+  onOpenAddTextModal: (index: number, type: TextBlockType) => void;
+  onOpenEditTextModal: (index: number, textBlock: TextBlock) => void;
+  onDeleteText: (index: number, textBlockId: string) => void;
 }
 
 const MAX_IMAGES = 6;
 
-export const ChecklistItem: React.FC<ChecklistItemProps> = ({ item, onToggle, onAddImages, onDeleteImage, onOpenAddTextModal, onOpenEditTextModal, onDeleteText }) => {
+export const ChecklistItem: React.FC<ChecklistItemProps> = React.memo(({ item, index, onToggle, onAddImages, onDeleteImage, onOpenAddTextModal, onOpenEditTextModal, onDeleteText }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isAddTextOpen, setIsAddTextOpen] = useState(false);
   const [isContentVisible, setIsContentVisible] = useState(true);
+  const [isUploading, setIsUploading] = useState(false);
   const { text, isChecked, images = [], texts = [] } = item;
 
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
-    if (!files) return;
+    if (!files || files.length === 0) return;
+
+    setIsUploading(true);
 
     const remainingSlots = MAX_IMAGES - images.length;
     const filesToProcess = Array.from(files).slice(0, remainingSlots);
@@ -38,8 +42,11 @@ export const ChecklistItem: React.FC<ChecklistItemProps> = ({ item, onToggle, on
     });
 
     Promise.all(imagePromises).then(base64Images => {
-      onAddImages(base64Images);
-    }).catch(error => console.error("Error al leer las imágenes", error));
+      onAddImages(index, base64Images);
+    }).catch(error => console.error("Error al leer las imágenes", error))
+    .finally(() => {
+        setIsUploading(false);
+    });
     
     if(fileInputRef.current) {
         fileInputRef.current.value = '';
@@ -67,7 +74,7 @@ export const ChecklistItem: React.FC<ChecklistItemProps> = ({ item, onToggle, on
           <input
             type="checkbox"
             checked={isChecked}
-            onChange={onToggle}
+            onChange={() => onToggle(index)}
             className="hidden"
           />
           <div className={`w-5 h-5 mr-4 border-2 rounded flex-shrink-0 flex items-center justify-center transition-all duration-300 ease-in-out ${isChecked ? 'bg-sky-500 border-sky-500' : 'border-slate-500 group-hover:border-sky-500'}`}>
@@ -105,8 +112,8 @@ export const ChecklistItem: React.FC<ChecklistItemProps> = ({ item, onToggle, on
                                 <p className={getTextStyle(textBlock.type)}>{textBlock.content}</p>
                              )}
                              <div className="absolute top-0 right-0 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <button onClick={() => onOpenEditTextModal(textBlock)} className="p-1 text-slate-400 hover:text-sky-400"><PencilIcon className="w-4 h-4" /></button>
-                                <button onClick={() => onDeleteText(textBlock.id)} className="p-1 text-slate-400 hover:text-red-400"><TrashIcon className="w-4 h-4" /></button>
+                                <button onClick={() => onOpenEditTextModal(index, textBlock)} className="p-1 text-slate-400 hover:text-sky-400"><PencilIcon className="w-4 h-4" /></button>
+                                <button onClick={() => onDeleteText(index, textBlock.id)} className="p-1 text-slate-400 hover:text-red-400"><TrashIcon className="w-4 h-4" /></button>
                              </div>
                         </div>
                     ))}
@@ -116,11 +123,11 @@ export const ChecklistItem: React.FC<ChecklistItemProps> = ({ item, onToggle, on
             {/* Images */}
             {images.length > 0 && (
               <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
-                {images.map((imgSrc, index) => (
-                  <div key={index} className="relative group aspect-square">
-                    <img src={imgSrc} alt={`attachment ${index + 1}`} className="w-full h-full object-cover rounded-md" />
+                {images.map((imgSrc, imageIndex) => (
+                  <div key={imageIndex} className="relative group aspect-square">
+                    <img src={imgSrc} alt={`attachment ${imageIndex + 1}`} className="w-full h-full object-cover rounded-md" />
                     <button 
-                      onClick={() => onDeleteImage(index)}
+                      onClick={() => onDeleteImage(index, imageIndex)}
                       className="absolute top-0.5 right-0.5 bg-black/60 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity focus:opacity-100"
                       aria-label="Eliminar imagen"
                     >
@@ -141,12 +148,24 @@ export const ChecklistItem: React.FC<ChecklistItemProps> = ({ item, onToggle, on
                     className="hidden"
                 />
                 <button 
-                onClick={triggerFileInput}
-                disabled={images.length >= MAX_IMAGES}
-                className="flex items-center gap-2 text-xs text-sky-400 hover:text-sky-300 disabled:text-slate-500 disabled:cursor-not-allowed transition-colors"
+                    onClick={triggerFileInput}
+                    disabled={images.length >= MAX_IMAGES || isUploading}
+                    className="flex items-center gap-2 text-xs text-sky-400 hover:text-sky-300 disabled:text-slate-500 disabled:cursor-not-allowed transition-colors"
                 >
-                    <ImageIcon className="w-4 h-4" />
-                    Añadir Imagen ({images.length}/{MAX_IMAGES})
+                    {isUploading ? (
+                        <>
+                            <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-sky-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            Cargando...
+                        </>
+                    ) : (
+                        <>
+                            <ImageIcon className="w-4 h-4" />
+                            Añadir Imagen ({images.length}/{MAX_IMAGES})
+                        </>
+                    )}
                 </button>
                 
                 <div className="relative">
@@ -159,10 +178,10 @@ export const ChecklistItem: React.FC<ChecklistItemProps> = ({ item, onToggle, on
                     </button>
                     {isAddTextOpen && (
                         <div className="absolute bottom-full mb-2 w-32 bg-slate-900 border border-slate-700 rounded-md shadow-lg z-10">
-                            <button onClick={() => { onOpenAddTextModal('title'); setIsAddTextOpen(false); }} className="w-full text-left px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-700">Título</button>
-                            <button onClick={() => { onOpenAddTextModal('subtitle'); setIsAddTextOpen(false); }} className="w-full text-left px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-700">Subtítulo</button>
-                            <button onClick={() => { onOpenAddTextModal('body'); setIsAddTextOpen(false); }} className="w-full text-left px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-700">Párrafo</button>
-                             <button onClick={() => { onOpenAddTextModal('observation'); setIsAddTextOpen(false); }} className="w-full text-left px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-700">Observación</button>
+                            <button onClick={() => { onOpenAddTextModal(index, 'title'); setIsAddTextOpen(false); }} className="w-full text-left px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-700">Título</button>
+                            <button onClick={() => { onOpenAddTextModal(index, 'subtitle'); setIsAddTextOpen(false); }} className="w-full text-left px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-700">Subtítulo</button>
+                            <button onClick={() => { onOpenAddTextModal(index, 'body'); setIsAddTextOpen(false); }} className="w-full text-left px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-700">Párrafo</button>
+                             <button onClick={() => { onOpenAddTextModal(index, 'observation'); setIsAddTextOpen(false); }} className="w-full text-left px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-700">Observación</button>
                         </div>
                     )}
                 </div>
@@ -172,4 +191,4 @@ export const ChecklistItem: React.FC<ChecklistItemProps> = ({ item, onToggle, on
       </div>
     </li>
   );
-};
+});
