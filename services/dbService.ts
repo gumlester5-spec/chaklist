@@ -1,3 +1,4 @@
+
 export type TextBlockType = 'title' | 'subtitle' | 'body' | 'observation';
 
 export interface TextBlock {
@@ -98,5 +99,55 @@ export const deleteList = (id: number): Promise<void> => {
 
     request.onsuccess = () => resolve();
     request.onerror = () => reject(request.error);
+  });
+};
+
+export const clearAllData = (): Promise<void> => {
+  return new Promise(async (resolve, reject) => {
+    const db = await initDB();
+    const transaction = db.transaction(STORE_NAME, 'readwrite');
+    const store = transaction.objectStore(STORE_NAME);
+    const request = store.clear();
+
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+  });
+};
+
+export const importLists = (lists: Checklist[]): Promise<void> => {
+  return new Promise(async (resolve, reject) => {
+    const db = await initDB();
+    const transaction = db.transaction(STORE_NAME, 'readwrite');
+    const store = transaction.objectStore(STORE_NAME);
+
+    // Clear existing data first
+    const clearRequest = store.clear();
+    clearRequest.onerror = () => reject(clearRequest.error);
+    
+    clearRequest.onsuccess = () => {
+        if (lists.length === 0) {
+            resolve();
+            return;
+        }
+
+        let completed = 0;
+        const total = lists.length;
+        // Add new lists
+        lists.forEach(list => {
+            const addRequest = store.add(list);
+            addRequest.onerror = (e) => {
+              console.error('Failed to add list during import', e);
+              // We don't reject here to allow other items to be added
+              completed++;
+              if (completed === total) resolve();
+            };
+            addRequest.onsuccess = () => {
+                completed++;
+                if (completed === total) {
+                    resolve();
+                }
+            }
+        });
+    };
   });
 };

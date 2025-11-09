@@ -1,9 +1,10 @@
 
+
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { generateChecklistFromText } from './services/geminiService';
 import { ChecklistItem } from './components/ChecklistItem';
-import { CopyIcon, SparklesIcon, PlusIcon, TrashIcon, ClearIcon, MenuIcon, DownloadIcon, PencilIcon, TextIcon, LightbulbIcon, DownloadCloudIcon, RefreshCwIcon } from './components/Icons';
-import { initDB, getAllLists, addList, updateList, deleteList, Checklist, ChecklistItemData, TextBlock, TextBlockType } from './services/dbService';
+import { CopyIcon, SparklesIcon, PlusIcon, TrashIcon, ClearIcon, DownloadIcon, PencilIcon, TextIcon, LightbulbIcon, DownloadCloudIcon, RefreshCwIcon, SettingsIcon, UploadCloudIcon, ListIcon } from './components/Icons';
+import { initDB, getAllLists, addList, updateList, deleteList, Checklist, ChecklistItemData, TextBlock, TextBlockType, clearAllData, importLists } from './services/dbService';
 
 type ModalState = {
   isOpen: boolean;
@@ -223,6 +224,7 @@ const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
 
   // PWA Install and Update State
   const [installPrompt, setInstallPrompt] = useState<any>(null);
@@ -283,25 +285,32 @@ const App: React.FC = () => {
     };
   }, []);
   
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        await initDB();
-        const storedLists = await getAllLists();
-        setLists(storedLists);
-        if (storedLists.length > 0) {
-            setActiveListId(storedLists[0].id);
-            setView('detail');
+  const loadDataFromDb = useCallback(async () => {
+    try {
+      await initDB();
+      const storedLists = await getAllLists();
+      setLists(storedLists);
+      if (storedLists.length > 0) {
+        // If the active list was deleted, select the first one.
+        if (!activeListId || !storedLists.some(l => l.id === activeListId)) {
+          setActiveListId(storedLists[0].id);
         }
-      } catch (e) {
-        console.error("Failed to load lists from DB", e);
-        setError("No se pudieron cargar las listas guardadas.");
-      } finally {
-        setIsLoading(false);
+        setView('detail');
+      } else {
+        setActiveListId(null);
+        setView('welcome');
       }
-    };
-    loadData();
-  }, []);
+    } catch (e) {
+      console.error("Failed to load lists from DB", e);
+      setError("No se pudieron cargar las listas guardadas.");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [activeListId]);
+
+  useEffect(() => {
+    loadDataFromDb();
+  }, [loadDataFromDb]);
 
   const handleInstallClick = async () => {
     if (!installPrompt) return;
@@ -404,6 +413,18 @@ const App: React.FC = () => {
         setError("No se pudo actualizar la lista.");
     }
   };
+  
+  const handleDeleteAllData = async () => {
+      try {
+          await clearAllData();
+          setLists([]);
+          setActiveListId(null);
+          setView('welcome');
+      } catch (e) {
+          console.error("Failed to delete all data", e);
+          setError("Error al eliminar los datos.");
+      }
+  };
 
   const activeList = useMemo(() => lists.find(l => l.id === activeListId), [lists, activeListId]);
 
@@ -426,6 +447,13 @@ const App: React.FC = () => {
             onExport={(metadata) => handleExportPDF(activeList, metadata, () => setIsReportModalOpen(false), setError)}
         />
       )}
+      {isSettingsModalOpen && (
+          <SettingsModal 
+              onClose={() => setIsSettingsModalOpen(false)}
+              onImport={loadDataFromDb}
+              onDeleteAll={handleDeleteAllData}
+          />
+      )}
       <Sidebar 
         lists={lists}
         activeListId={activeListId}
@@ -437,19 +465,13 @@ const App: React.FC = () => {
         onClose={() => setIsSidebarOpen(false)}
         installPrompt={installPrompt}
         onInstall={handleInstallClick}
+        onOpenSettings={() => setIsSettingsModalOpen(true)}
       />
-      <main className="flex-1 flex flex-col overflow-y-auto">
+      <main className="flex-1 flex flex-col overflow-y-auto pb-20 lg:pb-0">
         <header className="flex lg:hidden items-center justify-between p-4 border-b border-slate-700/80 bg-slate-900/50 backdrop-blur-sm sticky top-0 z-10">
             <h1 className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-sky-400 to-indigo-500">
                 Checklister IA
             </h1>
-            <button 
-                onClick={() => setIsSidebarOpen(true)}
-                className="p-1 text-slate-400 hover:text-white"
-                aria-label="Abrir menú"
-            >
-                <MenuIcon className="w-6 h-6" />
-            </button>
         </header>
         <div className="flex-1 p-4 sm:p-6 lg:p-8">
             {error && <p className="text-red-400 mb-4">{error}</p>}
@@ -458,11 +480,49 @@ const App: React.FC = () => {
             {view === 'detail' && activeList && <ChecklistDetail list={activeList} onUpdate={handleUpdateList} onOpenReportModal={() => setIsReportModalOpen(true)} />}
         </div>
       </main>
+      <BottomNavBar 
+        onOpenSidebar={() => setIsSidebarOpen(true)}
+        onCreateNew={handleCreateNew}
+        onOpenSettings={() => setIsSettingsModalOpen(true)}
+      />
     </div>
   );
 };
 
 // --- Sub-components ---
+
+interface BottomNavBarProps {
+    onOpenSidebar: () => void;
+    onCreateNew: () => void;
+    onOpenSettings: () => void;
+}
+
+const BottomNavBar: React.FC<BottomNavBarProps> = ({ onOpenSidebar, onCreateNew, onOpenSettings }) => {
+    return (
+        <div className="fixed bottom-0 left-0 right-0 h-16 lg:hidden z-20">
+            <div className="absolute inset-x-0 bottom-6 flex justify-center">
+                <button 
+                    onClick={onCreateNew} 
+                    className="bg-gradient-to-r from-sky-500 to-indigo-600 text-white rounded-full p-4 shadow-lg hover:scale-105 transition-transform duration-200 ease-in-out"
+                    aria-label="Crear nueva lista"
+                >
+                    <PlusIcon className="w-7 h-7" />
+                </button>
+            </div>
+            <footer className="absolute inset-0 bg-slate-800/80 backdrop-blur-sm border-t border-slate-700 flex justify-between items-center px-4">
+                <button onClick={onOpenSidebar} className="flex-1 flex flex-col items-center justify-center text-slate-400 hover:text-sky-400 transition-colors h-full">
+                    <ListIcon className="w-6 h-6 mb-1" />
+                    <span className="text-xs tracking-wide">Listas</span>
+                </button>
+                <div className="w-20"></div> 
+                <button onClick={onOpenSettings} className="flex-1 flex flex-col items-center justify-center text-slate-400 hover:text-sky-400 transition-colors h-full">
+                    <SettingsIcon className="w-6 h-6 mb-1" />
+                    <span className="text-xs tracking-wide">Ajustes</span>
+                </button>
+            </footer>
+        </div>
+    );
+};
 
 interface SidebarProps {
   lists: Checklist[];
@@ -475,9 +535,10 @@ interface SidebarProps {
   onClose: () => void;
   installPrompt: any;
   onInstall: () => void;
+  onOpenSettings: () => void;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ lists, activeListId, onCreateNew, onSelectList, onDeleteList, onUpdateList, isOpen, onClose, installPrompt, onInstall }) => {
+const Sidebar: React.FC<SidebarProps> = ({ lists, activeListId, onCreateNew, onSelectList, onDeleteList, onUpdateList, isOpen, onClose, installPrompt, onInstall, onOpenSettings }) => {
     const [editingListId, setEditingListId] = useState<number | null>(null);
     const [editingTitle, setEditingTitle] = useState('');
 
@@ -569,7 +630,7 @@ const Sidebar: React.FC<SidebarProps> = ({ lists, activeListId, onCreateNew, onS
             ))}
           </ul>
         </nav>
-        <footer className="mt-auto pt-4 border-t border-slate-700/80">
+        <footer className="mt-auto pt-4 border-t border-slate-700/80 space-y-2">
             {installPrompt && (
                 <button
                     onClick={onInstall}
@@ -579,6 +640,13 @@ const Sidebar: React.FC<SidebarProps> = ({ lists, activeListId, onCreateNew, onS
                     Instalar App
                 </button>
             )}
+            <button
+                onClick={onOpenSettings}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-slate-700 text-slate-300 font-semibold rounded-lg hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-800 focus:ring-slate-500 transition-all duration-200"
+            >
+                <SettingsIcon className="w-5 h-5" />
+                Configuración
+            </button>
         </footer>
       </aside>
     </>
@@ -960,6 +1028,125 @@ const ReportMetadataModal: React.FC<ReportMetadataModalProps> = ({ listTitle, on
                         <button type="submit" className="px-4 py-2 bg-sky-600 text-white font-semibold rounded-md hover:bg-sky-500 transition-colors">Generar PDF</button>
                     </footer>
                 </form>
+            </div>
+        </div>
+    );
+};
+
+interface SettingsModalProps {
+    onClose: () => void;
+    onImport: () => Promise<void>;
+    onDeleteAll: () => Promise<void>;
+}
+
+const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onImport, onDeleteAll }) => {
+    const importInputRef = useRef<HTMLInputElement>(null);
+    const [error, setError] = useState<string | null>(null);
+
+    const handleExport = async () => {
+        setError(null);
+        try {
+            const lists = await getAllLists();
+            const dataStr = JSON.stringify(lists, null, 2);
+            const blob = new Blob([dataStr], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            const timestamp = new Date().toISOString().slice(0, 10);
+            link.download = `checklister_ia_backup_${timestamp}.json`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        } catch (e) {
+            console.error("Error exporting data", e);
+            setError("No se pudieron exportar los datos.");
+        }
+    };
+
+    const handleImportClick = () => {
+        importInputRef.current?.click();
+    };
+
+    const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+        setError(null);
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            try {
+                const text = e.target?.result;
+                if (typeof text !== 'string') {
+                    throw new Error("El archivo no se pudo leer.");
+                }
+                const importedLists = JSON.parse(text);
+
+                if (!Array.isArray(importedLists) || (importedLists.length > 0 && !importedLists.every(l => l.id && l.title && Array.isArray(l.items)))) {
+                   throw new Error("El archivo de respaldo tiene un formato inválido.");
+                }
+
+                if (window.confirm("¿Estás seguro de que quieres importar estos datos? Se sobrescribirán todas tus listas actuales.")) {
+                    await importLists(importedLists);
+                    await onImport();
+                    onClose();
+                }
+            } catch (err) {
+                console.error("Error importing data", err);
+                const message = err instanceof Error ? err.message : "Error desconocido.";
+                setError(`Error al importar: ${message}`);
+            } finally {
+                if (importInputRef.current) importInputRef.current.value = "";
+            }
+        };
+        reader.readAsText(file);
+    };
+
+    const handleDelete = () => {
+        if (window.confirm("¡ADVERTENCIA! ¿Estás seguro de que quieres eliminar TODAS tus listas? Esta acción no se puede deshacer.")) {
+             if (window.confirm("Confirmación final: ¿Realmente quieres borrar todo?")) {
+                onDeleteAll().then(onClose);
+             }
+        }
+    };
+    
+    return (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
+            <div className="bg-slate-800 rounded-lg shadow-xl w-full max-w-md flex flex-col animate-in fade-in-0 zoom-in-95">
+                <header className="p-4 flex justify-between items-center border-b border-slate-700">
+                    <h2 className="text-xl font-bold text-slate-100">Configuración</h2>
+                    <button onClick={onClose} className="p-1 text-slate-400 hover:text-white"><ClearIcon className="w-6 h-6" /></button>
+                </header>
+                <div className="p-6 space-y-4">
+                    {error && <p className="text-red-400 text-sm mb-4 bg-red-500/10 p-2 rounded-md">{error}</p>}
+                    <div className="space-y-2">
+                        <h3 className="text-lg font-semibold text-slate-300">Gestión de Datos</h3>
+                        <p className="text-sm text-slate-400">
+                            Realiza una copia de seguridad de tus listas o importa un archivo existente.
+                        </p>
+                    </div>
+                    <div className="flex flex-col sm:flex-row gap-3">
+                         <button onClick={handleExport} className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-slate-700 text-slate-300 font-semibold rounded-lg hover:bg-slate-600 transition-colors">
+                            <DownloadCloudIcon className="w-5 h-5" />
+                            Exportar
+                         </button>
+                         <button onClick={handleImportClick} className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-slate-700 text-slate-300 font-semibold rounded-lg hover:bg-slate-600 transition-colors">
+                           <UploadCloudIcon className="w-5 h-5" />
+                           Importar
+                         </button>
+                         <input type="file" ref={importInputRef} onChange={handleFileChange} accept=".json" className="hidden" />
+                    </div>
+                    <div className="pt-4 border-t border-slate-700">
+                        <h3 className="text-lg font-semibold text-red-400">Zona de Peligro</h3>
+                        <p className="text-sm text-slate-400 mb-2">
+                           Esta acción es irreversible y eliminará permanentemente todas tus listas.
+                        </p>
+                        <button onClick={handleDelete} className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-red-600/20 text-red-400 font-semibold rounded-lg hover:bg-red-600/30 border border-red-600/50 transition-colors">
+                            <TrashIcon className="w-5 h-5" />
+                            Eliminar todos los datos
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
     );
