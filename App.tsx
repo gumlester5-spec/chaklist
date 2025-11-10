@@ -1,4 +1,5 @@
 
+
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { generateChecklistFromText } from './services/geminiService';
 import { ChecklistItem } from './components/ChecklistItem';
@@ -181,6 +182,8 @@ const exportPDF = async (list: Checklist, metadata: ReportMetadata, design: PdfD
         y += 30;
         
         let imageCounter = 1;
+        const observationColors = ['#4A90E2', '#50E3C2', '#F5A623', '#D64045', '#9013FE', '#4A4A4A', '#00796B'];
+        let observationColorIndex = 0;
 
         for (const item of list.items) {
             checkNewPage(40);
@@ -193,48 +196,91 @@ const exportPDF = async (list: Checklist, metadata: ReportMetadata, design: PdfD
             y += stepTitleLines.length * FONT_SIZES.H3 * 1.2 + 15;
 
             (item.texts || []).forEach(textBlock => {
-                let fontSize, fontStyle, color;
-                let isObservation = textBlock.type === 'observation';
-                
-                if (isObservation) {
-                    fontSize = FONT_SIZES.P; fontStyle = 'italic'; color = COLORS.TEXT;
-                } else if (textBlock.type === 'title') {
-                    fontSize = FONT_SIZES.H3; fontStyle = 'bold'; color = COLORS.TEXT;
-                } else if (textBlock.type === 'subtitle') {
-                    fontSize = FONT_SIZES.P; fontStyle = 'bold'; color = COLORS.TEXT;
-                } else {
-                    fontSize = FONT_SIZES.P; fontStyle = 'normal'; color = COLORS.TEXT;
-                }
-                
-                const textLines = doc.splitTextToSize(textBlock.content, CONTENT_WIDTH - 15);
-                const requiredHeight = textLines.length * fontSize * 1.4 + 10;
-                checkNewPage(requiredHeight);
+                const PADDING = 10;
+                let requiredHeight = 0;
+                let textLines: string[] = [];
 
-                if (isObservation) {
-                    if (design === 'moderno') {
-                        doc.setFillColor('#FEFCE8'); // Light yellow
-                        doc.setDrawColor(COLORS.BORDER);
-                        doc.roundedRect(MARGIN, y-5, CONTENT_WIDTH, requiredHeight + 10, 5, 5, 'FD');
-                        doc.setFont(FONT_FAMILY_P, 'bold');
-                        doc.setFontSize(FONT_SIZES.P);
-                        doc.text("Observación:", MARGIN + 10, y + 10);
-                        doc.setFont(FONT_FAMILY_P, fontStyle);
-                        doc.text(textLines, MARGIN + 15, y + 30);
+                switch (textBlock.type) {
+                    case 'title': {
+                        const fontSize = FONT_SIZES.H3;
+                        textLines = doc.splitTextToSize(textBlock.content, CONTENT_WIDTH - PADDING * 2);
+                        requiredHeight = textLines.length * fontSize * 1.4 + PADDING * 2;
+                        checkNewPage(requiredHeight + 15);
+                        
+                        doc.setFillColor(design === 'moderno' ? '#EBF8FF' : design === 'clasico' ? '#FDFBF5' : '#F5F5F5');
+                        doc.roundedRect(MARGIN, y, CONTENT_WIDTH, requiredHeight, 5, 5, 'F');
+                        
+                        doc.setFont(FONT_FAMILY_H, 'bold');
+                        doc.setFontSize(fontSize);
+                        doc.setTextColor(COLORS.ACCENT);
+                        doc.text(textLines, PAGE_WIDTH / 2, y + PADDING + fontSize, { align: 'center', lineHeightFactor: 1.4 });
                         y += requiredHeight + 15;
-                    } else { // Clasico and Minimalista
-                        doc.setFont(FONT_FAMILY_P, 'bold');
-                        doc.setFontSize(FONT_SIZES.P);
-                        doc.text("Observación:", MARGIN + 15, y);
-                        doc.setFont(FONT_FAMILY_P, 'italic');
-                        doc.text(textLines, MARGIN + 15, y + FONT_SIZES.P * 1.2);
-                        y += requiredHeight + 10;
+                        break;
                     }
-                } else {
-                     doc.setFont(FONT_FAMILY_P, fontStyle);
-                     doc.setFontSize(fontSize);
-                     doc.setTextColor(color);
-                     doc.text(textLines, MARGIN + 15, y);
-                     y += requiredHeight;
+                    case 'subtitle': {
+                        const fontSize = FONT_SIZES.P * 1.1;
+                        textLines = doc.splitTextToSize(textBlock.content, CONTENT_WIDTH - PADDING * 2);
+                        requiredHeight = textLines.length * fontSize * 1.4 + PADDING * 2;
+                        checkNewPage(requiredHeight + 10);
+                        
+                        doc.setFillColor(design === 'moderno' ? '#F7FAFC' : design === 'clasico' ? '#FDFBF5' : '#F5F5F5');
+                        doc.roundedRect(MARGIN, y, CONTENT_WIDTH, requiredHeight, 5, 5, 'F');
+                        
+                        doc.setFont(FONT_FAMILY_H, 'bold');
+                        doc.setFontSize(fontSize);
+                        doc.setTextColor(COLORS.TEXT);
+                        doc.text(textLines, PAGE_WIDTH / 2, y + PADDING + fontSize, { align: 'center', lineHeightFactor: 1.4 });
+                        y += requiredHeight + 10;
+                        break;
+                    }
+                    case 'body': {
+                        const fontSize = FONT_SIZES.P;
+                        const blockWidth = CONTENT_WIDTH - 15;
+                        textLines = doc.splitTextToSize(textBlock.content, blockWidth - PADDING * 2);
+                        requiredHeight = textLines.length * fontSize * 1.4 + PADDING * 2;
+                        checkNewPage(requiredHeight + 10);
+                        
+                        doc.setFillColor(design === 'moderno' ? '#F7FAFC' : design === 'clasico' ? '#FDFBF5' : '#F5F5F5');
+                        doc.roundedRect(MARGIN + 15, y, blockWidth, requiredHeight, 5, 5, 'F');
+
+                        doc.setFont(FONT_FAMILY_P, 'normal');
+                        doc.setFontSize(fontSize);
+                        doc.setTextColor(COLORS.TEXT);
+                        doc.text(textLines, MARGIN + 15 + PADDING, y + PADDING + fontSize, { lineHeightFactor: 1.4 });
+                        y += requiredHeight + 10;
+                        break;
+                    }
+                    case 'observation': {
+                        const fontSize = FONT_SIZES.P;
+                        const textLines = doc.splitTextToSize(textBlock.content, CONTENT_WIDTH - 15);
+                        let requiredHeight = textLines.length * fontSize * 1.4 + 10;
+                        checkNewPage(requiredHeight + 25);
+                        
+                        if (design === 'moderno') {
+                            const totalHeight = requiredHeight + 25; // Extra space for title
+                            doc.setFillColor('#FEFCE8'); // Light yellow
+                            doc.setDrawColor(COLORS.BORDER);
+                            doc.roundedRect(MARGIN, y - 5, CONTENT_WIDTH, totalHeight, 5, 5, 'FD');
+                            
+                            doc.setFont(FONT_FAMILY_P, 'bold');
+                            doc.setFontSize(FONT_SIZES.P);
+                            doc.text("Observación:", MARGIN + 10, y + 10);
+                            
+                            doc.setFont(FONT_FAMILY_P, 'italic');
+                            doc.text(textLines, MARGIN + 15, y + 30);
+                            y += totalHeight;
+                        } else { // Clasico and Minimalista
+                            doc.setFont(FONT_FAMILY_P, 'bold');
+                            doc.setFontSize(FONT_SIZES.P);
+                            doc.text("Observación:", MARGIN + 15, y);
+                            y += FONT_SIZES.P * 1.4;
+                            doc.setFont(FONT_FAMILY_P, 'italic');
+                            doc.text(textLines, MARGIN + 15, y);
+                            y += requiredHeight;
+                        }
+                         y += 10; // Extra spacing after
+                        break;
+                    }
                 }
             });
             
@@ -243,8 +289,8 @@ const exportPDF = async (list: Checklist, metadata: ReportMetadata, design: PdfD
                     const { width: originalWidth, height: originalHeight } = await getImageDimensions(img.src);
                     const aspectRatio = originalWidth / originalHeight;
 
-                    const maxImgWidth = CONTENT_WIDTH * 0.85; 
-                    const maxImgHeight = PAGE_HEIGHT * 0.6; 
+                    const maxImgWidth = CONTENT_WIDTH * 0.85;
+                    const maxImgHeight = PAGE_HEIGHT * 0.6;
 
                     let pdfImgWidth = maxImgWidth;
                     let pdfImgHeight = pdfImgWidth / aspectRatio;
@@ -253,34 +299,59 @@ const exportPDF = async (list: Checklist, metadata: ReportMetadata, design: PdfD
                         pdfImgHeight = maxImgHeight;
                         pdfImgWidth = pdfImgHeight * aspectRatio;
                     }
-
-                    let requiredHeight = pdfImgHeight + 30;
+                    
+                    let observationBubbleHeight = 0;
                     let observationLines: string[] = [];
-
+                    
                     if (img.observation) {
-                        observationLines = doc.splitTextToSize(img.observation, CONTENT_WIDTH - 20);
-                        requiredHeight += observationLines.length * (FONT_SIZES.P * 0.9) * 1.2 + 15;
+                        const bubblePadding = 10;
+                        const bubbleWidth = CONTENT_WIDTH * 0.9;
+                        const textMaxWidth = bubbleWidth - bubblePadding * 2;
+                        const observationFontSize = FONT_SIZES.P * 0.95;
+
+                        doc.setFont(FONT_FAMILY_P, 'normal');
+                        doc.setFontSize(observationFontSize);
+                        observationLines = doc.splitTextToSize(img.observation, textMaxWidth);
+                        
+                        if (observationLines.length > 0) {
+                            observationBubbleHeight = (observationLines.length * observationFontSize * 1.2) + (bubblePadding * 2);
+                        }
                     }
                     
-                    checkNewPage(requiredHeight);
+                    const requiredTotalHeight = pdfImgHeight + 25 + (observationBubbleHeight > 0 ? observationBubbleHeight + 10 : 0);
+                    checkNewPage(requiredTotalHeight);
 
                     const imgX = (PAGE_WIDTH - pdfImgWidth) / 2;
                     doc.addImage(img.src, 'JPEG', imgX, y, pdfImgWidth, pdfImgHeight);
-                    y += pdfImgHeight + 5;
+                    y += pdfImgHeight;
+                    
+                    if (img.observation && observationBubbleHeight > 0) {
+                        y += 10; // Spacing between image and bubble
+                        
+                        const bubblePadding = 10;
+                        const bubbleWidth = CONTENT_WIDTH * 0.9;
+                        const observationFontSize = FONT_SIZES.P * 0.95;
 
-                    if (img.observation) {
+                        const bubbleColor = observationColors[observationColorIndex % observationColors.length];
+                        observationColorIndex++;
+
+                        const bubbleX = (PAGE_WIDTH - bubbleWidth) / 2;
+                        doc.setFillColor(bubbleColor);
+                        doc.roundedRect(bubbleX, y, bubbleWidth, observationBubbleHeight, 8, 8, 'F');
+
+                        doc.setTextColor('#FFFFFF');
                         doc.setFont(FONT_FAMILY_P, 'normal');
-                        doc.setFontSize(FONT_SIZES.P * 0.9);
-                        doc.setTextColor('#555555');
-                        doc.text(observationLines, PAGE_WIDTH / 2, y + 10, { align: 'center', maxWidth: CONTENT_WIDTH - 20 });
-                        y += observationLines.length * (FONT_SIZES.P * 0.9) * 1.2 + 15;
+                        doc.setFontSize(observationFontSize);
+                        doc.text(observationLines, bubbleX + bubblePadding, y + bubblePadding + observationFontSize, { lineHeightFactor: 1.2 });
+                        
+                        y += observationBubbleHeight;
                     }
 
                     doc.setFont(FONT_FAMILY_P, 'italic');
                     doc.setFontSize(FONT_SIZES.FOOTER);
                     doc.setTextColor(COLORS.TEXT);
                     const caption = `Figura ${imageCounter}`;
-                    doc.text(caption, PAGE_WIDTH / 2, y + 10, { align: 'center' });
+                    doc.text(caption, PAGE_WIDTH / 2, y + 15, { align: 'center' });
                     y += 25;
                     imageCounter++;
                 } catch (e) { 

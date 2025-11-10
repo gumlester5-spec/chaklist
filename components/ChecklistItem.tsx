@@ -56,15 +56,68 @@ export const ChecklistItem: React.FC<ChecklistItemProps> = React.memo(({ item, i
     fileInputRef.current?.click();
   };
 
-  const getTextStyle = (type: TextBlockType) => {
-      switch(type) {
-          case 'title': return 'text-lg font-bold text-slate-200 mt-2';
-          case 'subtitle': return 'text-md font-semibold text-slate-300 mt-1';
-          case 'body': return 'text-sm text-slate-400 whitespace-pre-wrap';
-          case 'observation': return 'text-sm text-slate-300 bg-slate-600/50 p-3 rounded-md border-l-4 border-amber-400';
-          default: return 'text-slate-300';
-      }
-  }
+  const renderTextBlock = (textBlock: TextBlock) => {
+    const containerClasses = "bg-slate-800 p-3 rounded-md relative group/block";
+    const buttonClasses = "absolute top-1 right-1 flex items-center gap-1 opacity-0 group-hover/block:opacity-100 transition-opacity";
+
+    const EditButtons = () => (
+        <div className={buttonClasses}>
+            <button onClick={() => onOpenEditTextModal(index, textBlock)} className="p-1 text-slate-400 hover:text-sky-400 bg-slate-900/50 rounded"><PencilIcon className="w-4 h-4" /></button>
+            <button onClick={() => onDeleteText(index, textBlock.id)} className="p-1 text-slate-400 hover:text-red-400 bg-slate-900/50 rounded"><TrashIcon className="w-4 h-4" /></button>
+        </div>
+    );
+    
+    switch(textBlock.type) {
+        case 'title':
+            return (
+                <div className="my-4">
+                    <div className="text-center mb-2">
+                        <span className="text-xs font-semibold text-sky-400 bg-sky-900/50 px-2 py-1 rounded-full">TÍTULO</span>
+                    </div>
+                    <div className={containerClasses}>
+                        <p className="text-xl font-bold text-slate-100 text-center whitespace-pre-wrap">{textBlock.content}</p>
+                        <EditButtons />
+                    </div>
+                </div>
+            );
+        case 'subtitle':
+            return (
+                <div className="my-3">
+                    <div className="text-center mb-2">
+                         <span className="text-xs font-semibold text-slate-400 bg-slate-600/50 px-2 py-1 rounded-full">SUBTÍTULO</span>
+                    </div>
+                    <div className={containerClasses}>
+                        <p className="text-lg font-semibold text-slate-300 text-center whitespace-pre-wrap">{textBlock.content}</p>
+                        <EditButtons />
+                    </div>
+                </div>
+            );
+        case 'body':
+            return (
+                <div className="my-2">
+                    <div className="mb-1">
+                        <span className="text-xs font-semibold text-slate-500">PÁRRAFO</span>
+                    </div>
+                    <div className={containerClasses}>
+                        <p className="text-sm text-slate-300 whitespace-pre-wrap">{textBlock.content}</p>
+                        <EditButtons />
+                    </div>
+                </div>
+            );
+        case 'observation':
+            return (
+                <div className="text-sm text-slate-300 bg-slate-600/50 p-3 rounded-md border-l-4 border-amber-400 relative group/block">
+                    <div className="flex items-start gap-2">
+                        <LightbulbIcon className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
+                        <p className="whitespace-pre-wrap flex-1">{textBlock.content}</p>
+                    </div>
+                    <EditButtons />
+                </div>
+            );
+        default:
+            return <p className="text-slate-300 whitespace-pre-wrap">{textBlock.content}</p>;
+    }
+  };
 
   return (
     <li className="flex flex-col bg-slate-700/50 p-3 rounded-md transition-all duration-200">
@@ -99,21 +152,8 @@ export const ChecklistItem: React.FC<ChecklistItemProps> = React.memo(({ item, i
             {texts.length > 0 && (
                 <div className="space-y-2">
                     {texts.map(textBlock => (
-                        <div key={textBlock.id} className="group relative pr-12">
-                            {textBlock.type === 'observation' ? (
-                                <div className={getTextStyle('observation')}>
-                                    <div className="flex items-start gap-2">
-                                        <LightbulbIcon className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
-                                        <p className="whitespace-pre-wrap flex-1">{textBlock.content}</p>
-                                    </div>
-                                </div>
-                             ) : (
-                                <p className={getTextStyle(textBlock.type)}>{textBlock.content}</p>
-                             )}
-                             <div className="absolute top-0 right-0 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <button onClick={() => onOpenEditTextModal(index, textBlock)} className="p-1 text-slate-400 hover:text-sky-400"><PencilIcon className="w-4 h-4" /></button>
-                                <button onClick={() => onDeleteText(index, textBlock.id)} className="p-1 text-slate-400 hover:text-red-400"><TrashIcon className="w-4 h-4" /></button>
-                             </div>
+                        <div key={textBlock.id}>
+                             {renderTextBlock(textBlock)}
                         </div>
                     ))}
                 </div>
