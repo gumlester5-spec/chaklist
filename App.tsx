@@ -1,7 +1,4 @@
 
-
-
-
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { generateChecklistFromText } from './services/geminiService';
 import { ChecklistItem } from './components/ChecklistItem';
@@ -31,9 +28,19 @@ interface ImageObservationModalState {
     newImages: string[];
 }
 
+type PdfDesign = 'moderno' | 'clasico' | 'minimalista';
 
-// FIX: Moved handleExportPDF outside the component to make it a standalone utility function.
-const handleExportPDF = async (list: Checklist, metadata: ReportMetadata, onFinish: () => void, setError: (e: string | null) => void) => {
+const getImageDimensions = (src: string): Promise<{ width: number; height: number }> => {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight });
+        img.onerror = (err) => reject(err);
+        img.src = src;
+    });
+};
+
+
+const exportPDF = async (list: Checklist, metadata: ReportMetadata, design: PdfDesign, onFinish: () => void, setError: (e: string | null) => void) => {
     // @ts-ignore
     const { jsPDF } = window.jspdf;
     if (!jsPDF) {
@@ -52,19 +59,42 @@ const handleExportPDF = async (list: Checklist, metadata: ReportMetadata, onFini
         const MARGIN = 60;
         const CONTENT_WIDTH = PAGE_WIDTH - MARGIN * 2;
         
-        const COLORS = { TEXT: '#333333', ACCENT: '#003366', BORDER: '#DDDDDD' };
-        const FONT_SIZES = { H1: 24, H2: 18, H3: 14, P: 11, FOOTER: 9 };
+        let FONT_FAMILY_H: string, FONT_FAMILY_P: string, COLORS: any, FONT_SIZES: any;
+
+        switch (design) {
+            case 'clasico':
+                FONT_FAMILY_H = 'times'; FONT_FAMILY_P = 'times';
+                COLORS = { TEXT: '#000000', ACCENT: '#000000', BORDER: '#AAAAAA' };
+                FONT_SIZES = { H1: 22, H2: 16, H3: 14, P: 12, FOOTER: 9 };
+                break;
+            case 'minimalista':
+                FONT_FAMILY_H = 'helvetica'; FONT_FAMILY_P = 'helvetica';
+                COLORS = { TEXT: '#222222', ACCENT: '#000000', BORDER: '#EAEAEA' };
+                FONT_SIZES = { H1: 20, H2: 16, H3: 12, P: 10, FOOTER: 8 };
+                break;
+            case 'moderno':
+            default:
+                FONT_FAMILY_H = 'helvetica'; FONT_FAMILY_P = 'helvetica';
+                COLORS = { TEXT: '#333333', ACCENT: '#003366', BORDER: '#DDDDDD' };
+                FONT_SIZES = { H1: 24, H2: 18, H3: 14, P: 11, FOOTER: 9 };
+                break;
+        }
         
         let y = 0;
         let page = 1;
 
         const addPageFooter = (pageNum: number) => {
+            doc.setFont(FONT_FAMILY_P, 'normal');
             doc.setFontSize(FONT_SIZES.FOOTER);
             doc.setTextColor(COLORS.TEXT);
             doc.text(`Página ${pageNum}`, PAGE_WIDTH / 2, PAGE_HEIGHT - 30, { align: 'center' });
         };
         
         const addNewPage = () => {
+            if (design === 'clasico') {
+                 doc.setDrawColor(COLORS.BORDER);
+                 doc.rect(MARGIN/2, MARGIN/2, PAGE_WIDTH - MARGIN, PAGE_HEIGHT - MARGIN);
+            }
             addPageFooter(page);
             doc.addPage();
             page++;
@@ -78,12 +108,12 @@ const handleExportPDF = async (list: Checklist, metadata: ReportMetadata, onFini
         };
         
         // --- PAGE 1: COVER PAGE ---
-        doc.setFont('helvetica', 'bold');
+        doc.setFont(FONT_FAMILY_H, 'bold');
         doc.setFontSize(36);
         doc.setTextColor(COLORS.ACCENT);
         doc.text("Informe de Trabajo", PAGE_WIDTH / 2, PAGE_HEIGHT / 2 - 120, { align: 'center' });
         
-        doc.setFont('helvetica', 'normal');
+        doc.setFont(FONT_FAMILY_P, 'normal');
         doc.setFontSize(FONT_SIZES.H1);
         doc.setTextColor(COLORS.TEXT);
         const titleLines = doc.splitTextToSize(list.title, CONTENT_WIDTH - 20);
@@ -97,9 +127,9 @@ const handleExportPDF = async (list: Checklist, metadata: ReportMetadata, onFini
         ];
         doc.setFontSize(FONT_SIZES.H3);
         coverDetails.forEach(detail => {
-            doc.setFont('helvetica', 'bold');
+            doc.setFont(FONT_FAMILY_P, 'bold');
             doc.text(detail.label, MARGIN + 100, y, { align: 'right' });
-            doc.setFont('helvetica', 'normal');
+            doc.setFont(FONT_FAMILY_P, 'normal');
             doc.text(detail.value, MARGIN + 110, y);
             y += 25;
         });
@@ -107,51 +137,54 @@ const handleExportPDF = async (list: Checklist, metadata: ReportMetadata, onFini
         addNewPage();
 
         // --- PAGE 2: INTRODUCTION ---
-        doc.setFont('helvetica', 'bold');
+        doc.setFont(FONT_FAMILY_H, 'bold');
         doc.setFontSize(FONT_SIZES.H2);
         doc.setTextColor(COLORS.ACCENT);
         doc.text("1.0 Objetivo del Trabajo", MARGIN, y);
+        if (design === 'clasico') doc.line(MARGIN, y + 5, MARGIN + 150, y + 5);
         y += 30;
 
-        doc.setFont('helvetica', 'normal');
+        doc.setFont(FONT_FAMILY_P, 'normal');
         doc.setFontSize(FONT_SIZES.P);
         doc.setTextColor(COLORS.TEXT);
         const objectiveLines = doc.splitTextToSize(metadata.objective, CONTENT_WIDTH);
         doc.text(objectiveLines, MARGIN, y);
         y += objectiveLines.length * FONT_SIZES.P * 1.4 + 40;
 
-        doc.setFont('helvetica', 'bold');
+        doc.setFont(FONT_FAMILY_H, 'bold');
         doc.setFontSize(FONT_SIZES.H2);
         doc.setTextColor(COLORS.ACCENT);
         doc.text("2.0 Equipo y Seguridad", MARGIN, y);
+        if (design === 'clasico') doc.line(MARGIN, y + 5, MARGIN + 150, y + 5);
         y += 30;
         
-        doc.setFont('helvetica', 'bold');
+        doc.setFont(FONT_FAMILY_P, 'bold');
         doc.setFontSize(FONT_SIZES.P);
         doc.text("Herramientas:", MARGIN, y);
-        doc.setFont('helvetica', 'normal');
+        doc.setFont(FONT_FAMILY_P, 'normal');
         doc.text(metadata.tools, MARGIN + 80, y);
         y += 25;
 
-        doc.setFont('helvetica', 'bold');
+        doc.setFont(FONT_FAMILY_P, 'bold');
         doc.text("Seguridad:", MARGIN, y);
-        doc.setFont('helvetica', 'normal');
+        doc.setFont(FONT_FAMILY_P, 'normal');
         doc.text(metadata.safety, MARGIN + 80, y);
         y += 40;
         
         // --- SUBSEQUENT PAGES: PROCESS ---
         checkNewPage(40);
-        doc.setFont('helvetica', 'bold');
+        doc.setFont(FONT_FAMILY_H, 'bold');
         doc.setFontSize(FONT_SIZES.H2);
         doc.setTextColor(COLORS.ACCENT);
         doc.text("3.0 Proceso de Mantenimiento", MARGIN, y);
+         if (design === 'clasico') doc.line(MARGIN, y + 5, MARGIN + 200, y + 5);
         y += 30;
         
         let imageCounter = 1;
 
-        list.items.forEach((item) => {
+        for (const item of list.items) {
             checkNewPage(40);
-            doc.setFont('helvetica', 'bold');
+            doc.setFont(FONT_FAMILY_H, 'bold');
             doc.setFontSize(FONT_SIZES.H3);
             doc.setTextColor(COLORS.TEXT);
             const stepTitle = item.text;
@@ -173,64 +206,99 @@ const handleExportPDF = async (list: Checklist, metadata: ReportMetadata, onFini
                     fontSize = FONT_SIZES.P; fontStyle = 'normal'; color = COLORS.TEXT;
                 }
                 
-                const textLines = doc.splitTextToSize(textBlock.content, isObservation ? CONTENT_WIDTH - 25 : CONTENT_WIDTH - 15);
-                const requiredHeight = textLines.length * fontSize * 1.4 + (isObservation ? 20 : 10);
+                const textLines = doc.splitTextToSize(textBlock.content, CONTENT_WIDTH - 15);
+                const requiredHeight = textLines.length * fontSize * 1.4 + 10;
                 checkNewPage(requiredHeight);
 
                 if (isObservation) {
-                    doc.setFillColor('#FEFCE8'); // Light yellow
-                    doc.setDrawColor(COLORS.BORDER);
-                    doc.roundedRect(MARGIN, y-5, CONTENT_WIDTH, requiredHeight, 5, 5, 'FD');
-                    doc.setFontSize(FONT_SIZES.P);
-                    doc.text("Observación:", MARGIN + 10, y + 10);
-                    doc.setFont('helvetica', fontStyle);
-                    doc.text(textLines, MARGIN + 15, y + 30);
+                    if (design === 'moderno') {
+                        doc.setFillColor('#FEFCE8'); // Light yellow
+                        doc.setDrawColor(COLORS.BORDER);
+                        doc.roundedRect(MARGIN, y-5, CONTENT_WIDTH, requiredHeight + 10, 5, 5, 'FD');
+                        doc.setFont(FONT_FAMILY_P, 'bold');
+                        doc.setFontSize(FONT_SIZES.P);
+                        doc.text("Observación:", MARGIN + 10, y + 10);
+                        doc.setFont(FONT_FAMILY_P, fontStyle);
+                        doc.text(textLines, MARGIN + 15, y + 30);
+                        y += requiredHeight + 15;
+                    } else { // Clasico and Minimalista
+                        doc.setFont(FONT_FAMILY_P, 'bold');
+                        doc.setFontSize(FONT_SIZES.P);
+                        doc.text("Observación:", MARGIN + 15, y);
+                        doc.setFont(FONT_FAMILY_P, 'italic');
+                        doc.text(textLines, MARGIN + 15, y + FONT_SIZES.P * 1.2);
+                        y += requiredHeight + 10;
+                    }
                 } else {
-                     doc.setFont('helvetica', fontStyle);
+                     doc.setFont(FONT_FAMILY_P, fontStyle);
                      doc.setFontSize(fontSize);
                      doc.setTextColor(color);
                      doc.text(textLines, MARGIN + 15, y);
+                     y += requiredHeight;
                 }
-                
-                y += requiredHeight;
             });
             
-            (item.images || []).forEach((img) => {
-                const imgSize = 180;
-                let requiredHeight = imgSize + 30;
-                let observationLines: string[] = [];
-
-                if (img.observation) {
-                    observationLines = doc.splitTextToSize(img.observation, CONTENT_WIDTH - 20);
-                    requiredHeight += observationLines.length * (FONT_SIZES.P * 0.9) * 1.2 + 15;
-                }
-                
-                checkNewPage(requiredHeight);
-
+            for (const img of (item.images || [])) {
                 try {
-                    const imgX = PAGE_WIDTH / 2 - imgSize / 2;
-                    doc.addImage(img.src, 'JPEG', imgX, y, imgSize, imgSize);
-                    y += imgSize + 5;
+                    const { width: originalWidth, height: originalHeight } = await getImageDimensions(img.src);
+                    const aspectRatio = originalWidth / originalHeight;
+
+                    const maxImgWidth = CONTENT_WIDTH * 0.85; 
+                    const maxImgHeight = PAGE_HEIGHT * 0.6; 
+
+                    let pdfImgWidth = maxImgWidth;
+                    let pdfImgHeight = pdfImgWidth / aspectRatio;
+
+                    if (pdfImgHeight > maxImgHeight) {
+                        pdfImgHeight = maxImgHeight;
+                        pdfImgWidth = pdfImgHeight * aspectRatio;
+                    }
+
+                    let requiredHeight = pdfImgHeight + 30;
+                    let observationLines: string[] = [];
 
                     if (img.observation) {
-                        doc.setFont('helvetica', 'normal');
+                        observationLines = doc.splitTextToSize(img.observation, CONTENT_WIDTH - 20);
+                        requiredHeight += observationLines.length * (FONT_SIZES.P * 0.9) * 1.2 + 15;
+                    }
+                    
+                    checkNewPage(requiredHeight);
+
+                    const imgX = (PAGE_WIDTH - pdfImgWidth) / 2;
+                    doc.addImage(img.src, 'JPEG', imgX, y, pdfImgWidth, pdfImgHeight);
+                    y += pdfImgHeight + 5;
+
+                    if (img.observation) {
+                        doc.setFont(FONT_FAMILY_P, 'normal');
                         doc.setFontSize(FONT_SIZES.P * 0.9);
                         doc.setTextColor('#555555');
                         doc.text(observationLines, PAGE_WIDTH / 2, y + 10, { align: 'center', maxWidth: CONTENT_WIDTH - 20 });
                         y += observationLines.length * (FONT_SIZES.P * 0.9) * 1.2 + 15;
                     }
 
-                    doc.setFont('helvetica', 'italic');
+                    doc.setFont(FONT_FAMILY_P, 'italic');
                     doc.setFontSize(FONT_SIZES.FOOTER);
                     doc.setTextColor(COLORS.TEXT);
                     const caption = `Figura ${imageCounter}`;
                     doc.text(caption, PAGE_WIDTH / 2, y + 10, { align: 'center' });
                     y += 25;
                     imageCounter++;
-                } catch (e) { console.error("Could not add image", e); }
-            });
-        });
+                } catch (e) { 
+                    console.error("Could not add image", e);
+                    checkNewPage(30);
+                    doc.setFont(FONT_FAMILY_P, 'italic');
+                    doc.setFontSize(FONT_SIZES.P);
+                    doc.setTextColor('#CC0000');
+                    doc.text('[Error: No se pudo cargar la imagen para el informe]', PAGE_WIDTH / 2, y, { align: 'center' });
+                    y += 20;
+                }
+            }
+        }
         
+        if (design === 'clasico') {
+             doc.setDrawColor(COLORS.BORDER);
+             doc.rect(MARGIN/2, MARGIN/2, PAGE_WIDTH - MARGIN, PAGE_HEIGHT - MARGIN);
+        }
         addPageFooter(page);
         doc.save(`${list.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.pdf`);
     } catch(e) {
@@ -250,6 +318,8 @@ const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+  const [isDesignSelectorOpen, setIsDesignSelectorOpen] = useState(false);
+  const [selectedDesign, setSelectedDesign] = useState<PdfDesign>('moderno');
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [observationModalState, setObservationModalState] = useState<ImageObservationModalState>({
     isOpen: false,
@@ -519,6 +589,22 @@ const App: React.FC = () => {
       handleUpdateList(updatedList);
   }, [activeList, handleUpdateList]);
 
+  const handleStartExport = () => {
+    setIsDesignSelectorOpen(true);
+  };
+  
+  const handleDesignSelected = (design: PdfDesign) => {
+    setSelectedDesign(design);
+    setIsDesignSelectorOpen(false);
+    setIsReportModalOpen(true);
+  };
+
+  const handleExecuteExport = (metadata: ReportMetadata) => {
+    if (activeList) {
+        exportPDF(activeList, metadata, selectedDesign, () => setIsReportModalOpen(false), setError);
+    }
+  };
+
   if (isLoading) {
     return (
         <div className="flex items-center justify-center min-h-screen bg-slate-900 text-slate-400">
@@ -530,12 +616,17 @@ const App: React.FC = () => {
   return (
     <div className="flex h-screen font-sans bg-slate-900 text-slate-100 overflow-hidden">
       {isUpdateAvailable && <UpdateAvailableToast onUpdate={handleUpdateApp} />}
+       {isDesignSelectorOpen && (
+        <PdfDesignSelectorModal
+            onClose={() => setIsDesignSelectorOpen(false)}
+            onSelect={handleDesignSelected}
+        />
+      )}
       {isReportModalOpen && activeList && (
         <ReportMetadataModal 
             listTitle={activeList.title}
             onClose={() => setIsReportModalOpen(false)}
-            // FIX: Call the standalone handleExportPDF function instead of a component static method.
-            onExport={(metadata) => handleExportPDF(activeList, metadata, () => setIsReportModalOpen(false), setError)}
+            onExport={handleExecuteExport}
         />
       )}
       {isSettingsModalOpen && (
@@ -578,7 +669,7 @@ const App: React.FC = () => {
                 <ChecklistDetail 
                     list={activeList} 
                     onUpdate={handleUpdateList} 
-                    onOpenReportModal={() => setIsReportModalOpen(true)}
+                    onStartExport={handleStartExport}
                     onAddImages={handleOpenObservationModal}
                     onDeleteImage={handleDeleteImage}
                 />
@@ -786,12 +877,12 @@ const NewChecklist: React.FC<NewChecklistProps> = ({ onGenerate, isGenerating, o
 interface ChecklistDetailProps {
     list: Checklist;
     onUpdate: (list: Checklist) => void;
-    onOpenReportModal: () => void;
+    onStartExport: () => void;
     onAddImages: (itemIndex: number, newImages: string[]) => void;
     onDeleteImage: (itemIndex: number, imageIndex: number) => void;
 }
 
-const ChecklistDetail: React.FC<ChecklistDetailProps> = ({ list, onUpdate, onOpenReportModal, onAddImages, onDeleteImage }) => {
+const ChecklistDetail: React.FC<ChecklistDetailProps> = ({ list, onUpdate, onStartExport, onAddImages, onDeleteImage }) => {
     const [copySuccess, setCopySuccess] = useState('');
     const [modalState, setModalState] = useState<ModalState>({ isOpen: false, itemIndex: null, textBlock: null, isNew: false });
     const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -929,7 +1020,7 @@ const ChecklistDetail: React.FC<ChecklistDetailProps> = ({ list, onUpdate, onOpe
                         {copySuccess || 'Copiar'}
                     </button>
                     <button
-                        onClick={onOpenReportModal}
+                        onClick={onStartExport}
                         className="flex-shrink-0 flex items-center gap-2 px-3 py-1.5 sm:px-4 sm:py-2 bg-slate-700 text-slate-300 text-xs sm:text-sm font-medium rounded-lg hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-900 focus:ring-slate-500 transition-colors duration-200"
                     >
                         <DownloadIcon className="w-4 h-4" />
@@ -1179,6 +1270,74 @@ const ReportMetadataModal: React.FC<ReportMetadataModalProps> = ({ listTitle, on
                         <button type="submit" className="px-4 py-2 bg-sky-600 text-white font-semibold rounded-md hover:bg-sky-500 transition-colors">Generar PDF</button>
                     </footer>
                 </form>
+            </div>
+        </div>
+    );
+};
+
+interface PdfDesignSelectorModalProps {
+    onClose: () => void;
+    onSelect: (design: PdfDesign) => void;
+}
+
+const PdfDesignSelectorModal: React.FC<PdfDesignSelectorModalProps> = ({ onClose, onSelect }) => {
+    const designs: { id: PdfDesign; name: string; description: string }[] = [
+        { id: 'moderno', name: 'Moderno', description: 'Diseño limpio con acentos de color azul.' },
+        { id: 'clasico', name: 'Clásico', description: 'Formal y tradicional, con fuentes serif.' },
+        { id: 'minimalista', name: 'Minimalista', description: 'Simple, en escala de grises y con mucho espacio.' }
+    ];
+
+    const ModernoPreview = () => (
+        <div className="w-full h-28 bg-slate-700 p-3 rounded border-2 border-slate-600 space-y-2">
+            <div className="h-4 bg-sky-500 rounded-sm w-1/2"></div>
+            <div className="h-2 bg-slate-500 rounded-sm w-3/4"></div>
+            <div className="h-2 bg-slate-500 rounded-sm w-full"></div>
+            <div className="h-6 bg-yellow-200/20 rounded-sm w-full mt-1"></div>
+        </div>
+    );
+    const ClasicoPreview = () => (
+         <div className="w-full h-28 bg-slate-100 p-3 rounded border-2 border-slate-400 font-serif space-y-2">
+            <div className="h-4 bg-slate-800 rounded-sm w-1/2"></div>
+            <div className="h-0.5 bg-slate-800 w-1/2"></div>
+            <div className="h-2 bg-slate-400 rounded-sm w-3/4 mt-2"></div>
+            <div className="h-2 bg-slate-400 rounded-sm w-full mt-1"></div>
+        </div>
+    );
+    const MinimalistaPreview = () => (
+         <div className="w-full h-28 bg-white p-3 rounded border-2 border-slate-300 space-y-2">
+            <div className="h-4 bg-black rounded-sm w-1/3"></div>
+            <div className="h-2 bg-gray-300 rounded-sm w-3/4 mt-3"></div>
+            <div className="h-2 bg-gray-300 rounded-sm w-full mt-1"></div>
+             <div className="h-2 bg-gray-300 rounded-sm w-2/3 mt-1"></div>
+        </div>
+    );
+
+    const previews = {
+        moderno: <ModernoPreview />,
+        clasico: <ClasicoPreview />,
+        minimalista: <MinimalistaPreview />,
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
+            <div className="bg-slate-800 rounded-lg shadow-xl w-full max-w-4xl flex flex-col animate-in fade-in-0 zoom-in-95">
+                <header className="p-4 border-b border-slate-700 text-center">
+                    <h2 className="text-xl font-bold text-slate-100">Elige un Diseño para tu Informe</h2>
+                </header>
+                <div className="p-6 grid grid-cols-1 md:grid-cols-3 gap-6">
+                    {designs.map(design => (
+                        <div key={design.id} onClick={() => onSelect(design.id)} className="flex flex-col gap-3 p-4 bg-slate-900 rounded-lg border-2 border-slate-700 hover:border-sky-500 cursor-pointer transition-all duration-200">
+                            {previews[design.id]}
+                            <div className="text-center">
+                                <h3 className="font-semibold text-slate-200">{design.name}</h3>
+                                <p className="text-xs text-slate-400">{design.description}</p>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+                <footer className="p-4 flex justify-end border-t border-slate-700">
+                    <button type="button" onClick={onClose} className="px-4 py-2 bg-slate-700 text-slate-300 font-medium rounded-md hover:bg-slate-600 transition-colors">Cancelar</button>
+                </footer>
             </div>
         </div>
     );
