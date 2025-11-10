@@ -1,4 +1,5 @@
 
+
 export type TextBlockType = 'title' | 'subtitle' | 'body' | 'observation';
 
 export interface TextBlock {
@@ -7,10 +8,15 @@ export interface TextBlock {
   content: string;
 }
 
+export interface ImageWithObservation {
+  src: string;
+  observation: string;
+}
+
 export interface ChecklistItemData {
   text: string;
   isChecked: boolean;
-  images?: string[];
+  images?: ImageWithObservation[];
   texts?: TextBlock[];
 }
 
@@ -73,7 +79,23 @@ export const getAllLists = (): Promise<Checklist[]> => {
     const store = transaction.objectStore(STORE_NAME);
     const request = store.getAll();
 
-    request.onsuccess = () => resolve(request.result.sort((a, b) => b.createdAt - a.createdAt));
+    request.onsuccess = () => {
+      const lists: Checklist[] = request.result;
+      
+      // Data migration for backward compatibility
+      lists.forEach(list => {
+        list.items.forEach(item => {
+          if (item.images && item.images.length > 0 && typeof (item.images as any)[0] === 'string') {
+            item.images = (item.images as any as string[]).map(src => ({
+              src: src,
+              observation: ''
+            }));
+          }
+        });
+      });
+      
+      resolve(lists.sort((a, b) => b.createdAt - a.createdAt));
+    };
     request.onerror = () => reject(request.error);
   });
 };

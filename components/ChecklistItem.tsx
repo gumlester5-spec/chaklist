@@ -31,7 +31,6 @@ export const ChecklistItem: React.FC<ChecklistItemProps> = React.memo(({ item, i
     const remainingSlots = MAX_IMAGES - images.length;
     const filesToProcess = Array.from(files).slice(0, remainingSlots);
     
-    // FIX: Explicitly type `file` as `File` to resolve TypeScript error where it was inferred as `unknown`.
     const imagePromises = filesToProcess.map((file: File) => {
       return new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
@@ -122,17 +121,24 @@ export const ChecklistItem: React.FC<ChecklistItemProps> = React.memo(({ item, i
 
             {/* Images */}
             {images.length > 0 && (
-              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
-                {images.map((imgSrc, imageIndex) => (
-                  <div key={imageIndex} className="relative group aspect-square">
-                    <img src={imgSrc} alt={`attachment ${imageIndex + 1}`} className="w-full h-full object-cover rounded-md" />
-                    <button 
-                      onClick={() => onDeleteImage(index, imageIndex)}
-                      className="absolute top-0.5 right-0.5 bg-black/60 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity focus:opacity-100"
-                      aria-label="Eliminar imagen"
-                    >
-                      <ClearIcon className="w-4 h-4" />
-                    </button>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                {images.map((img, imageIndex) => (
+                  <div key={imageIndex} className="group">
+                    <div className="relative group aspect-square">
+                        <img src={img.src} alt={`attachment ${imageIndex + 1}`} className="w-full h-full object-cover rounded-md" />
+                        <button 
+                          onClick={() => onDeleteImage(index, imageIndex)}
+                          className="absolute top-0.5 right-0.5 bg-black/60 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity focus:opacity-100"
+                          aria-label="Eliminar imagen"
+                        >
+                          <ClearIcon className="w-4 h-4" />
+                        </button>
+                    </div>
+                    {img.observation && (
+                        <p className="text-xs text-slate-400 italic mt-1 truncate" title={img.observation}>
+                            {img.observation}
+                        </p>
+                    )}
                   </div>
                 ))}
               </div>

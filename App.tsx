@@ -1,11 +1,12 @@
 
 
 
+
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { generateChecklistFromText } from './services/geminiService';
 import { ChecklistItem } from './components/ChecklistItem';
 import { CopyIcon, SparklesIcon, PlusIcon, TrashIcon, ClearIcon, DownloadIcon, PencilIcon, TextIcon, LightbulbIcon, DownloadCloudIcon, RefreshCwIcon, SettingsIcon, UploadCloudIcon, ListIcon } from './components/Icons';
-import { initDB, getAllLists, addList, updateList, deleteList, Checklist, ChecklistItemData, TextBlock, TextBlockType, clearAllData, importLists } from './services/dbService';
+import { initDB, getAllLists, addList, updateList, deleteList, Checklist, ChecklistItemData, TextBlock, TextBlockType, clearAllData, importLists, ImageWithObservation } from './services/dbService';
 
 type ModalState = {
   isOpen: boolean;
@@ -23,6 +24,13 @@ interface ReportMetadata {
     tools: string;
     safety: string;
 }
+
+interface ImageObservationModalState {
+    isOpen: boolean;
+    itemIndex: number | null;
+    newImages: string[];
+}
+
 
 // FIX: Moved handleExportPDF outside the component to make it a standalone utility function.
 const handleExportPDF = async (list: Checklist, metadata: ReportMetadata, onFinish: () => void, setError: (e: string | null) => void) => {
@@ -141,7 +149,7 @@ const handleExportPDF = async (list: Checklist, metadata: ReportMetadata, onFini
         
         let imageCounter = 1;
 
-        list.items.forEach((item, index) => {
+        list.items.forEach((item) => {
             checkNewPage(40);
             doc.setFont('helvetica', 'bold');
             doc.setFontSize(FONT_SIZES.H3);
@@ -153,7 +161,6 @@ const handleExportPDF = async (list: Checklist, metadata: ReportMetadata, onFini
 
             (item.texts || []).forEach(textBlock => {
                 let fontSize, fontStyle, color;
-                let blockYOffset = 15;
                 let isObservation = textBlock.type === 'observation';
                 
                 if (isObservation) {
@@ -188,13 +195,31 @@ const handleExportPDF = async (list: Checklist, metadata: ReportMetadata, onFini
                 y += requiredHeight;
             });
             
-            (item.images || []).forEach((imgData) => {
+            (item.images || []).forEach((img) => {
                 const imgSize = 180;
-                checkNewPage(imgSize + 30);
+                let requiredHeight = imgSize + 30;
+                let observationLines: string[] = [];
+
+                if (img.observation) {
+                    observationLines = doc.splitTextToSize(img.observation, CONTENT_WIDTH - 20);
+                    requiredHeight += observationLines.length * (FONT_SIZES.P * 0.9) * 1.2 + 15;
+                }
+                
+                checkNewPage(requiredHeight);
+
                 try {
                     const imgX = PAGE_WIDTH / 2 - imgSize / 2;
-                    doc.addImage(imgData, 'JPEG', imgX, y, imgSize, imgSize);
+                    doc.addImage(img.src, 'JPEG', imgX, y, imgSize, imgSize);
                     y += imgSize + 5;
+
+                    if (img.observation) {
+                        doc.setFont('helvetica', 'normal');
+                        doc.setFontSize(FONT_SIZES.P * 0.9);
+                        doc.setTextColor('#555555');
+                        doc.text(observationLines, PAGE_WIDTH / 2, y + 10, { align: 'center', maxWidth: CONTENT_WIDTH - 20 });
+                        y += observationLines.length * (FONT_SIZES.P * 0.9) * 1.2 + 15;
+                    }
+
                     doc.setFont('helvetica', 'italic');
                     doc.setFontSize(FONT_SIZES.FOOTER);
                     doc.setTextColor(COLORS.TEXT);
@@ -226,6 +251,11 @@ const App: React.FC = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [observationModalState, setObservationModalState] = useState<ImageObservationModalState>({
+    isOpen: false,
+    itemIndex: null,
+    newImages: [],
+  });
 
   // PWA Install and Update State
   const [installPrompt, setInstallPrompt] = useState<any>(null);
@@ -452,6 +482,43 @@ const App: React.FC = () => {
 
   const activeList = useMemo(() => lists.find(l => l.id === activeListId), [lists, activeListId]);
 
+  const handleOpenObservationModal = useCallback((itemIndex: number, newImages: string[]) => {
+      setObservationModalState({
+          isOpen: true,
+          itemIndex,
+          newImages,
+      });
+  }, []);
+
+  const handleSaveObservations = useCallback((observations: string[]) => {
+      const { itemIndex, newImages } = observationModalState;
+      if (itemIndex === null || !activeList) return;
+
+      const newImagesWithObs: ImageWithObservation[] = newImages.map((src, idx) => ({
+          src,
+          observation: observations[idx] || '',
+      }));
+
+      const updatedList = { ...activeList };
+      const newItems = [...updatedList.items];
+      const currentImages = newItems[itemIndex].images || [];
+      newItems[itemIndex].images = [...currentImages, ...newImagesWithObs];
+      updatedList.items = newItems;
+
+      handleUpdateList(updatedList);
+      setObservationModalState({ isOpen: false, itemIndex: null, newImages: [] });
+  }, [observationModalState, activeList, handleUpdateList]);
+
+  const handleDeleteImage = useCallback((itemIndex: number, imageIndex: number) => {
+      if (!activeList) return;
+      const updatedList = { ...activeList };
+      const newItems = [...updatedList.items];
+      const currentImages = newItems[itemIndex].images || [];
+      newItems[itemIndex].images = currentImages.filter((_, idx) => idx !== imageIndex);
+      updatedList.items = newItems;
+      handleUpdateList(updatedList);
+  }, [activeList, handleUpdateList]);
+
   if (isLoading) {
     return (
         <div className="flex items-center justify-center min-h-screen bg-slate-900 text-slate-400">
@@ -478,6 +545,13 @@ const App: React.FC = () => {
               onDeleteAll={handleDeleteAllData}
           />
       )}
+      {observationModalState.isOpen && (
+          <ImageObservationModal
+              images={observationModalState.newImages}
+              onClose={() => setObservationModalState({ isOpen: false, itemIndex: null, newImages: [] })}
+              onSave={handleSaveObservations}
+          />
+      )}
       <Sidebar 
         lists={lists}
         activeListId={activeListId}
@@ -500,7 +574,15 @@ const App: React.FC = () => {
             {error && <p className="text-red-400 mb-4">{error}</p>}
             {view === 'welcome' && <WelcomeScreen onCreateNew={handleCreateNew} />}
             {view === 'newList' && <NewChecklist onGenerate={handleGenerateAndSave} isGenerating={isGenerating} onCancel={handleCancelNewList} />}
-            {view === 'detail' && activeList && <ChecklistDetail list={activeList} onUpdate={handleUpdateList} onOpenReportModal={() => setIsReportModalOpen(true)} />}
+            {view === 'detail' && activeList && (
+                <ChecklistDetail 
+                    list={activeList} 
+                    onUpdate={handleUpdateList} 
+                    onOpenReportModal={() => setIsReportModalOpen(true)}
+                    onAddImages={handleOpenObservationModal}
+                    onDeleteImage={handleDeleteImage}
+                />
+            )}
         </div>
       </main>
       <BottomNavBar 
@@ -705,17 +787,16 @@ interface ChecklistDetailProps {
     list: Checklist;
     onUpdate: (list: Checklist) => void;
     onOpenReportModal: () => void;
+    onAddImages: (itemIndex: number, newImages: string[]) => void;
+    onDeleteImage: (itemIndex: number, imageIndex: number) => void;
 }
 
-const ChecklistDetail: React.FC<ChecklistDetailProps> = ({ list, onUpdate, onOpenReportModal }) => {
+const ChecklistDetail: React.FC<ChecklistDetailProps> = ({ list, onUpdate, onOpenReportModal, onAddImages, onDeleteImage }) => {
     const [copySuccess, setCopySuccess] = useState('');
-    const [isExporting, setIsExporting] = useState(false);
     const [modalState, setModalState] = useState<ModalState>({ isOpen: false, itemIndex: null, textBlock: null, isNew: false });
     const [isEditingTitle, setIsEditingTitle] = useState(false);
     const titleInputRef = useRef<HTMLInputElement>(null);
     
-    // PERF: Use a ref to hold the latest list data. This prevents callbacks from being
-    // recreated on every render, which in turn allows React.memo in ChecklistItem to work correctly.
     const listRef = useRef(list);
     useEffect(() => {
         listRef.current = list;
@@ -738,22 +819,6 @@ const ChecklistDetail: React.FC<ChecklistDetailProps> = ({ list, onUpdate, onOpe
     const handleTitleChange = useCallback((newTitle: string) => {
         const currentList = listRef.current;
         onUpdate({ ...currentList, title: newTitle });
-    }, [onUpdate]);
-
-    const handleAddImages = useCallback((itemIndex: number, newImages: string[]) => {
-        const currentList = listRef.current;
-        const newItems = [...currentList.items];
-        const currentImages = newItems[itemIndex].images || [];
-        newItems[itemIndex].images = [...currentImages, ...newImages];
-        onUpdate({ ...currentList, items: newItems });
-    }, [onUpdate]);
-
-    const handleDeleteImage = useCallback((itemIndex: number, imageIndex: number) => {
-        const currentList = listRef.current;
-        const newItems = [...currentList.items];
-        const currentImages = newItems[itemIndex].images || [];
-        newItems[itemIndex].images = currentImages.filter((_, idx) => idx !== imageIndex);
-        onUpdate({ ...currentList, items: newItems });
     }, [onUpdate]);
 
     const handleOpenAddTextModal = useCallback((itemIndex: number, type: TextBlockType) => {
@@ -865,8 +930,7 @@ const ChecklistDetail: React.FC<ChecklistDetailProps> = ({ list, onUpdate, onOpe
                     </button>
                     <button
                         onClick={onOpenReportModal}
-                        disabled={isExporting}
-                        className="flex-shrink-0 flex items-center gap-2 px-3 py-1.5 sm:px-4 sm:py-2 bg-slate-700 text-slate-300 text-xs sm:text-sm font-medium rounded-lg hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-900 focus:ring-slate-500 transition-colors duration-200 disabled:bg-slate-600 disabled:cursor-not-allowed"
+                        className="flex-shrink-0 flex items-center gap-2 px-3 py-1.5 sm:px-4 sm:py-2 bg-slate-700 text-slate-300 text-xs sm:text-sm font-medium rounded-lg hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-900 focus:ring-slate-500 transition-colors duration-200"
                     >
                         <DownloadIcon className="w-4 h-4" />
                         Exportar
@@ -882,8 +946,8 @@ const ChecklistDetail: React.FC<ChecklistDetailProps> = ({ list, onUpdate, onOpe
                       item={item}
                       index={index}
                       onToggle={handleToggleItem}
-                      onAddImages={handleAddImages}
-                      onDeleteImage={handleDeleteImage}
+                      onAddImages={onAddImages}
+                      onDeleteImage={onDeleteImage}
                       onOpenAddTextModal={handleOpenAddTextModal}
                       onOpenEditTextModal={handleOpenEditTextModal}
                       onDeleteText={handleDeleteText}
@@ -975,6 +1039,74 @@ const TextEditModal: React.FC<TextEditModalProps> = ({ textBlock, onSave, onClos
                         Guardar
                     </button>
                 </div>
+            </div>
+        </div>
+    );
+};
+
+interface ImageObservationModalProps {
+    images: string[];
+    onClose: () => void;
+    onSave: (observations: string[]) => void;
+}
+
+const ImageObservationModal: React.FC<ImageObservationModalProps> = ({ images, onClose, onSave }) => {
+    const [currentIndex, setCurrentIndex] = useState(0);
+    const [observations, setObservations] = useState<string[]>(() => Array(images.length).fill(''));
+    const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+    useEffect(() => {
+        textareaRef.current?.focus();
+    }, [currentIndex]);
+    
+    const handleObservationChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+        const newObservations = [...observations];
+        newObservations[currentIndex] = e.target.value;
+        setObservations(newObservations);
+    };
+
+    const handleNext = () => {
+        if (currentIndex < images.length - 1) {
+            setCurrentIndex(currentIndex + 1);
+        } else {
+            onSave(observations);
+        }
+    };
+    
+    const handleBack = () => {
+         if (currentIndex > 0) {
+            setCurrentIndex(currentIndex - 1);
+        }
+    }
+
+    const isLastImage = currentIndex === images.length - 1;
+
+    return (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
+            <div className="bg-slate-800 rounded-lg shadow-xl w-full max-w-lg flex flex-col animate-in fade-in-0 zoom-in-95">
+                <header className="p-4 border-b border-slate-700">
+                    <h2 className="text-xl font-bold text-slate-100">Añadir Observación</h2>
+                    <p className="text-sm text-slate-400">Imagen {currentIndex + 1} de {images.length}</p>
+                </header>
+                <div className="p-6 space-y-4">
+                    <img src={images[currentIndex]} alt={`Preview ${currentIndex + 1}`} className="w-full h-auto max-h-64 object-contain rounded-md bg-slate-900" />
+                    <textarea
+                        ref={textareaRef}
+                        value={observations[currentIndex]}
+                        onChange={handleObservationChange}
+                        placeholder="Añade una observación para esta imagen (opcional)..."
+                        className="w-full h-24 p-3 bg-slate-900 border border-slate-700 rounded-md focus:ring-2 focus:ring-sky-500 focus:border-sky-500 transition-colors duration-200 resize-y text-slate-200"
+                    />
+                </div>
+                <footer className="p-4 flex justify-between items-center bg-slate-800/50 border-t border-slate-700">
+                    <button type="button" onClick={onClose} className="px-4 py-2 text-slate-300 font-medium rounded-md hover:bg-slate-700 transition-colors">Cancelar</button>
+                    <div className="flex gap-3">
+                        <button type="button" onClick={handleBack} disabled={currentIndex === 0} className="px-4 py-2 bg-slate-700 text-slate-300 font-medium rounded-md hover:bg-slate-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">Atrás</button>
+                        <button type="button" onClick={handleNext} className="px-4 py-2 bg-sky-600 text-white font-semibold rounded-md hover:bg-sky-500 transition-colors">
+                            {isLastImage ? 'Guardar Todas' : 'Siguiente'}
+                        </button>
+                    </div>
+                </footer>
             </div>
         </div>
     );
