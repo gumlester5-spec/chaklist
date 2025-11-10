@@ -1,5 +1,4 @@
 
-
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { generateChecklistFromText } from './services/geminiService';
 import { ChecklistItem } from './components/ChecklistItem';
@@ -59,7 +58,7 @@ const exportPDF = async (list: Checklist, metadata: ReportMetadata, design: PdfD
         const PAGE_HEIGHT = doc.internal.pageSize.getHeight();
         const MARGIN = 60;
         const CONTENT_WIDTH = PAGE_WIDTH - MARGIN * 2;
-        const LINE_HEIGHT = 1.4;
+        const LINE_HEIGHT = 1.5;
         
         let FONT_FAMILY_H: string, FONT_FAMILY_P: string, COLORS: any, FONT_SIZES: any;
 
