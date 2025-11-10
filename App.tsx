@@ -59,6 +59,7 @@ const exportPDF = async (list: Checklist, metadata: ReportMetadata, design: PdfD
         const PAGE_HEIGHT = doc.internal.pageSize.getHeight();
         const MARGIN = 60;
         const CONTENT_WIDTH = PAGE_WIDTH - MARGIN * 2;
+        const LINE_HEIGHT = 1.4;
         
         let FONT_FAMILY_H: string, FONT_FAMILY_P: string, COLORS: any, FONT_SIZES: any;
 
@@ -92,7 +93,7 @@ const exportPDF = async (list: Checklist, metadata: ReportMetadata, design: PdfD
         };
         
         const addNewPage = () => {
-            if (design === 'clasico') {
+            if (page > 1 && design === 'clasico') {
                  doc.setDrawColor(COLORS.BORDER);
                  doc.rect(MARGIN/2, MARGIN/2, PAGE_WIDTH - MARGIN, PAGE_HEIGHT - MARGIN);
             }
@@ -149,8 +150,12 @@ const exportPDF = async (list: Checklist, metadata: ReportMetadata, design: PdfD
         doc.setFontSize(FONT_SIZES.P);
         doc.setTextColor(COLORS.TEXT);
         const objectiveLines = doc.splitTextToSize(metadata.objective, CONTENT_WIDTH);
-        doc.text(objectiveLines, MARGIN, y);
-        y += objectiveLines.length * FONT_SIZES.P * 1.4 + 40;
+        const objectiveHeight = objectiveLines.length * FONT_SIZES.P * LINE_HEIGHT;
+        checkNewPage(objectiveHeight + 40);
+        doc.text(objectiveLines, MARGIN, y, { lineHeightFactor: LINE_HEIGHT });
+        y += objectiveHeight + 40;
+
+        checkNewPage(40 + 30 + 25 + 25 + 40); // Height for next section
 
         doc.setFont(FONT_FAMILY_H, 'bold');
         doc.setFontSize(FONT_SIZES.H2);
@@ -163,14 +168,18 @@ const exportPDF = async (list: Checklist, metadata: ReportMetadata, design: PdfD
         doc.setFontSize(FONT_SIZES.P);
         doc.text("Herramientas:", MARGIN, y);
         doc.setFont(FONT_FAMILY_P, 'normal');
-        doc.text(metadata.tools, MARGIN + 80, y);
-        y += 25;
+        const toolsLines = doc.splitTextToSize(metadata.tools, CONTENT_WIDTH - 80);
+        doc.text(toolsLines, MARGIN + 80, y, { lineHeightFactor: LINE_HEIGHT });
+        y += toolsLines.length * FONT_SIZES.P * LINE_HEIGHT + 25;
+
+        checkNewPage(40);
 
         doc.setFont(FONT_FAMILY_P, 'bold');
         doc.text("Seguridad:", MARGIN, y);
         doc.setFont(FONT_FAMILY_P, 'normal');
-        doc.text(metadata.safety, MARGIN + 80, y);
-        y += 40;
+        const safetyLines = doc.splitTextToSize(metadata.safety, CONTENT_WIDTH - 80);
+        doc.text(safetyLines, MARGIN + 80, y, { lineHeightFactor: LINE_HEIGHT });
+        y += safetyLines.length * FONT_SIZES.P * LINE_HEIGHT + 40;
         
         // --- SUBSEQUENT PAGES: PROCESS ---
         checkNewPage(40);
@@ -192,8 +201,8 @@ const exportPDF = async (list: Checklist, metadata: ReportMetadata, design: PdfD
             doc.setTextColor(COLORS.TEXT);
             const stepTitle = item.text;
             const stepTitleLines = doc.splitTextToSize(stepTitle, CONTENT_WIDTH);
-            doc.text(stepTitleLines, MARGIN, y);
-            y += stepTitleLines.length * FONT_SIZES.H3 * 1.2 + 15;
+            doc.text(stepTitleLines, MARGIN, y, { lineHeightFactor: LINE_HEIGHT });
+            y += stepTitleLines.length * FONT_SIZES.H3 * LINE_HEIGHT + 15;
 
             (item.texts || []).forEach(textBlock => {
                 const PADDING = 10;
@@ -204,7 +213,7 @@ const exportPDF = async (list: Checklist, metadata: ReportMetadata, design: PdfD
                     case 'title': {
                         const fontSize = FONT_SIZES.H3;
                         textLines = doc.splitTextToSize(textBlock.content, CONTENT_WIDTH - PADDING * 2);
-                        requiredHeight = textLines.length * fontSize * 1.4 + PADDING * 2;
+                        requiredHeight = textLines.length * fontSize * LINE_HEIGHT + PADDING * 2;
                         checkNewPage(requiredHeight + 15);
                         
                         doc.setFillColor(design === 'moderno' ? '#EBF8FF' : design === 'clasico' ? '#FDFBF5' : '#F5F5F5');
@@ -213,14 +222,14 @@ const exportPDF = async (list: Checklist, metadata: ReportMetadata, design: PdfD
                         doc.setFont(FONT_FAMILY_H, 'bold');
                         doc.setFontSize(fontSize);
                         doc.setTextColor(COLORS.ACCENT);
-                        doc.text(textLines, PAGE_WIDTH / 2, y + PADDING + fontSize, { align: 'center', lineHeightFactor: 1.4 });
+                        doc.text(textLines, PAGE_WIDTH / 2, y + PADDING + fontSize, { align: 'center', lineHeightFactor: LINE_HEIGHT });
                         y += requiredHeight + 15;
                         break;
                     }
                     case 'subtitle': {
                         const fontSize = FONT_SIZES.P * 1.1;
                         textLines = doc.splitTextToSize(textBlock.content, CONTENT_WIDTH - PADDING * 2);
-                        requiredHeight = textLines.length * fontSize * 1.4 + PADDING * 2;
+                        requiredHeight = textLines.length * fontSize * LINE_HEIGHT + PADDING * 2;
                         checkNewPage(requiredHeight + 10);
                         
                         doc.setFillColor(design === 'moderno' ? '#F7FAFC' : design === 'clasico' ? '#FDFBF5' : '#F5F5F5');
@@ -229,7 +238,7 @@ const exportPDF = async (list: Checklist, metadata: ReportMetadata, design: PdfD
                         doc.setFont(FONT_FAMILY_H, 'bold');
                         doc.setFontSize(fontSize);
                         doc.setTextColor(COLORS.TEXT);
-                        doc.text(textLines, PAGE_WIDTH / 2, y + PADDING + fontSize, { align: 'center', lineHeightFactor: 1.4 });
+                        doc.text(textLines, PAGE_WIDTH / 2, y + PADDING + fontSize, { align: 'center', lineHeightFactor: LINE_HEIGHT });
                         y += requiredHeight + 10;
                         break;
                     }
@@ -237,7 +246,7 @@ const exportPDF = async (list: Checklist, metadata: ReportMetadata, design: PdfD
                         const fontSize = FONT_SIZES.P;
                         const blockWidth = CONTENT_WIDTH - 15;
                         textLines = doc.splitTextToSize(textBlock.content, blockWidth - PADDING * 2);
-                        requiredHeight = textLines.length * fontSize * 1.4 + PADDING * 2;
+                        requiredHeight = textLines.length * fontSize * LINE_HEIGHT + PADDING * 2;
                         checkNewPage(requiredHeight + 10);
                         
                         doc.setFillColor(design === 'moderno' ? '#F7FAFC' : design === 'clasico' ? '#FDFBF5' : '#F5F5F5');
@@ -246,18 +255,19 @@ const exportPDF = async (list: Checklist, metadata: ReportMetadata, design: PdfD
                         doc.setFont(FONT_FAMILY_P, 'normal');
                         doc.setFontSize(fontSize);
                         doc.setTextColor(COLORS.TEXT);
-                        doc.text(textLines, MARGIN + 15 + PADDING, y + PADDING + fontSize, { lineHeightFactor: 1.4 });
+                        doc.text(textLines, MARGIN + 15 + PADDING, y + PADDING + fontSize, { lineHeightFactor: LINE_HEIGHT });
                         y += requiredHeight + 10;
                         break;
                     }
                     case 'observation': {
                         const fontSize = FONT_SIZES.P;
                         const textLines = doc.splitTextToSize(textBlock.content, CONTENT_WIDTH - 15);
-                        let requiredHeight = textLines.length * fontSize * 1.4 + 10;
-                        checkNewPage(requiredHeight + 25);
+                        let requiredHeight = textLines.length * fontSize * LINE_HEIGHT + 10;
                         
                         if (design === 'moderno') {
                             const totalHeight = requiredHeight + 25; // Extra space for title
+                            checkNewPage(totalHeight + 15);
+
                             doc.setFillColor('#FEFCE8'); // Light yellow
                             doc.setDrawColor(COLORS.BORDER);
                             doc.roundedRect(MARGIN, y - 5, CONTENT_WIDTH, totalHeight, 5, 5, 'FD');
@@ -267,15 +277,16 @@ const exportPDF = async (list: Checklist, metadata: ReportMetadata, design: PdfD
                             doc.text("Observación:", MARGIN + 10, y + 10);
                             
                             doc.setFont(FONT_FAMILY_P, 'italic');
-                            doc.text(textLines, MARGIN + 15, y + 30);
+                            doc.text(textLines, MARGIN + 15, y + 30, { lineHeightFactor: LINE_HEIGHT });
                             y += totalHeight;
                         } else { // Clasico and Minimalista
+                             checkNewPage(requiredHeight + 25);
                             doc.setFont(FONT_FAMILY_P, 'bold');
                             doc.setFontSize(FONT_SIZES.P);
                             doc.text("Observación:", MARGIN + 15, y);
-                            y += FONT_SIZES.P * 1.4;
+                            y += FONT_SIZES.P * LINE_HEIGHT;
                             doc.setFont(FONT_FAMILY_P, 'italic');
-                            doc.text(textLines, MARGIN + 15, y);
+                            doc.text(textLines, MARGIN + 15, y, { lineHeightFactor: LINE_HEIGHT });
                             y += requiredHeight;
                         }
                          y += 10; // Extra spacing after
@@ -314,7 +325,7 @@ const exportPDF = async (list: Checklist, metadata: ReportMetadata, design: PdfD
                         observationLines = doc.splitTextToSize(img.observation, textMaxWidth);
                         
                         if (observationLines.length > 0) {
-                            observationBubbleHeight = (observationLines.length * observationFontSize * 1.2) + (bubblePadding * 2);
+                            observationBubbleHeight = (observationLines.length * observationFontSize * LINE_HEIGHT) + (bubblePadding * 2);
                         }
                     }
                     
@@ -342,7 +353,7 @@ const exportPDF = async (list: Checklist, metadata: ReportMetadata, design: PdfD
                         doc.setTextColor('#FFFFFF');
                         doc.setFont(FONT_FAMILY_P, 'normal');
                         doc.setFontSize(observationFontSize);
-                        doc.text(observationLines, bubbleX + bubblePadding, y + bubblePadding + observationFontSize, { lineHeightFactor: 1.2 });
+                        doc.text(observationLines, bubbleX + bubblePadding, y + bubblePadding + observationFontSize, { lineHeightFactor: LINE_HEIGHT });
                         
                         y += observationBubbleHeight;
                     }
