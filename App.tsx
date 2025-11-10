@@ -1,4 +1,5 @@
 
+
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { generateChecklistFromText } from './services/geminiService';
 import { ChecklistItem } from './components/ChecklistItem';
@@ -243,24 +244,34 @@ const exportPDF = async (list: Checklist, metadata: ReportMetadata, design: PdfD
                     }
                     case 'body': {
                         const fontSize = FONT_SIZES.P;
-                        const blockWidth = CONTENT_WIDTH - 15;
-                        textLines = doc.splitTextToSize(textBlock.content, blockWidth - PADDING * 2);
+                        const blockWidth = CONTENT_WIDTH;
+                        const textAvailableWidth = blockWidth - PADDING * 2;
+                        textLines = doc.splitTextToSize(textBlock.content, textAvailableWidth);
                         requiredHeight = textLines.length * fontSize * LINE_HEIGHT + PADDING * 2;
                         checkNewPage(requiredHeight + 10);
                         
                         doc.setFillColor(design === 'moderno' ? '#F7FAFC' : design === 'clasico' ? '#FDFBF5' : '#F5F5F5');
-                        doc.roundedRect(MARGIN + 15, y, blockWidth, requiredHeight, 5, 5, 'F');
+                        doc.roundedRect(MARGIN, y, blockWidth, requiredHeight, 5, 5, 'F');
 
                         doc.setFont(FONT_FAMILY_P, 'normal');
                         doc.setFontSize(fontSize);
                         doc.setTextColor(COLORS.TEXT);
-                        doc.text(textLines, MARGIN + 15 + PADDING, y + PADDING + fontSize, { lineHeightFactor: LINE_HEIGHT });
+                        doc.text(textLines, MARGIN + PADDING, y + PADDING + fontSize, { lineHeightFactor: LINE_HEIGHT });
                         y += requiredHeight + 10;
                         break;
                     }
                     case 'observation': {
                         const fontSize = FONT_SIZES.P;
-                        const textLines = doc.splitTextToSize(textBlock.content, CONTENT_WIDTH - 15);
+                        
+                        let textLines: string[];
+                        if (design === 'moderno') {
+                            const textAvailableWidth = CONTENT_WIDTH - 15 - 15; // Left and right padding
+                            textLines = doc.splitTextToSize(textBlock.content, textAvailableWidth);
+                        } else {
+                            const textAvailableWidth = CONTENT_WIDTH - 15; // Indented text
+                            textLines = doc.splitTextToSize(textBlock.content, textAvailableWidth);
+                        }
+                        
                         let requiredHeight = textLines.length * fontSize * LINE_HEIGHT + 10;
                         
                         if (design === 'moderno') {
